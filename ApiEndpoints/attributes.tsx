@@ -1,15 +1,22 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useMemo } from "react"
 
-// Define the types based on the provided data format
+// Add this import for the info icon
+import { Info } from "lucide-react"
+
+// Define the types based on the updated data format
 interface Operation {
   name: string
 }
 
+// Update the Endpoint interface to better handle SOAP operations
 interface Endpoint {
-  name: string
-  operations: string[]
+  path: string
+  method: "get" | "post" | "put" | "delete" | "soap"
+  operations?: string[] // Optional since REST endpoints don't have operations
 }
 
 interface Service {
@@ -19,30 +26,89 @@ interface Service {
 
 interface Repository {
   id: string
-  method: "rest" | "post"
   services: Service[]
+}
+
+// Helper function to truncate text
+const truncateText = (text: string, maxLength = 25) => {
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + "..."
+}
+
+// Component for displaying truncated text with an info icon
+const TruncatedText = ({
+  text,
+  maxLength = 25,
+  onShowTooltip,
+  onHideTooltip,
+}: {
+  text: string
+  maxLength?: number
+  onShowTooltip: (text: string, e: React.MouseEvent) => void
+  onHideTooltip: () => void
+}) => {
+  const truncated = text.length > maxLength
+  const displayText = truncated ? text.substring(0, maxLength) + "..." : text
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <span>{displayText}</span>
+      {truncated && (
+        <span
+          style={{
+            display: "inline-flex",
+            cursor: "pointer",
+            color: "#6B7280",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onMouseEnter={(e) => onShowTooltip(text, e)}
+          onMouseLeave={onHideTooltip}
+        >
+          <Info size={14} />
+        </span>
+      )}
+    </div>
+  )
 }
 
 // Sample data based on the new format
 const sampleData: Repository[] = [
   {
     id: "customer-api",
-    method: "rest",
     services: [
       {
         serviceName: "CustomerManagement",
         endpoints: [
           {
-            name: "GetCustomers",
+            path: "/api/v1/customers",
+            method: "get",
             operations: ["customerId", "customerName", "customerEmail", "customerPhone"],
           },
           {
-            name: "CreateCustomer",
+            path: "/api/v1/customers/create",
+            method: "post",
             operations: ["firstName", "lastName", "email", "phoneNumber", "address"],
           },
           {
-            name: "UpdateCustomer",
+            path: "/api/v1/customers/{customerId}",
+            method: "put",
             operations: ["customerId", "firstName", "lastName", "email"],
+          },
+        ],
+      },
+      {
+        serviceName: "CustomerManagement 2.0",
+        endpoints: [
+          {
+            path: "/api/v2/customers",
+            method: "get",
+            operations: ["customerId", "fullName", "email", "phoneNumber", "addressLine1", "addressLine2"],
+          },
+          {
+            path: "/api/v2/customers/{customerId}",
+            method: "get",
+            operations: ["customerId", "fullName", "email", "phoneNumber", "dateOfBirth", "customerSegment"],
           },
         ],
       },
@@ -50,11 +116,13 @@ const sampleData: Repository[] = [
         serviceName: "CustomerPreferences",
         endpoints: [
           {
-            name: "GetPreferences",
+            path: "/api/v1/customers/{customerId}/preferences",
+            method: "get",
             operations: ["customerId", "communicationPreferences", "marketingConsent"],
           },
           {
-            name: "UpdatePreferences",
+            path: "/api/v1/customers/{customerId}/preferences",
+            method: "put",
             operations: ["customerId", "communicationPreferences", "marketingConsent"],
           },
         ],
@@ -63,21 +131,23 @@ const sampleData: Repository[] = [
   },
   {
     id: "product-api",
-    method: "rest",
     services: [
       {
         serviceName: "ProductCatalog",
         endpoints: [
           {
-            name: "GetProducts",
+            path: "/api/v1/products",
+            method: "get",
             operations: ["productId", "productName", "price", "category", "inStock"],
           },
           {
-            name: "GetProductDetails",
+            path: "/api/v1/products/{productId}",
+            method: "get",
             operations: ["productId", "productName", "description", "price", "category", "specifications"],
           },
           {
-            name: "CreateProduct",
+            path: "/api/v1/products",
+            method: "post",
             operations: ["productName", "description", "price", "category", "specifications"],
           },
         ],
@@ -86,11 +156,13 @@ const sampleData: Repository[] = [
         serviceName: "InventoryManagement",
         endpoints: [
           {
-            name: "GetInventory",
+            path: "/api/v1/inventory",
+            method: "get",
             operations: ["productId", "warehouseId", "quantity", "lastUpdated"],
           },
           {
-            name: "UpdateInventory",
+            path: "/api/v1/inventory/{productId}",
+            method: "put",
             operations: ["productId", "warehouseId", "quantity", "reason"],
           },
         ],
@@ -98,18 +170,19 @@ const sampleData: Repository[] = [
     ],
   },
   {
-    id: "order-api",
-    method: "rest",
+    id: "order-api-with-very-long-name-that-needs-truncation",
     services: [
       {
         serviceName: "OrderManagement",
         endpoints: [
           {
-            name: "GetOrders",
+            path: "/api/v1/orders",
+            method: "get",
             operations: ["orderId", "customerId", "orderDate", "totalAmount", "status"],
           },
           {
-            name: "GetOrderDetails",
+            path: "/api/v1/orders/{orderId}",
+            method: "get",
             operations: [
               "orderId",
               "customerId",
@@ -125,17 +198,21 @@ const sampleData: Repository[] = [
               "status",
             ],
           },
+        ],
+      },
+      // Update the sample data to better represent SOAP structure
+      {
+        serviceName: "SOAP Order Service",
+        endpoints: [
           {
-            name: "CreateOrder",
-            operations: ["customerId", "items", "shippingAddress", "billingAddress", "paymentMethod"],
+            path: "http://example.com/soap/OrderService",
+            method: "soap",
+            operations: ["CreateOrder", "GetOrderStatus", "UpdateOrderDetails", "CancelOrder", "GetOrderHistory"],
           },
           {
-            name: "UpdateOrderStatus",
-            operations: ["orderId", "status", "statusReason", "updatedBy"],
-          },
-          {
-            name: "CancelOrder",
-            operations: ["orderId", "cancellationReason", "requestedBy"],
+            path: "http://example.com/soap/OrderPaymentService",
+            method: "soap",
+            operations: ["ProcessPayment", "RefundPayment", "GetPaymentStatus"],
           },
         ],
       },
@@ -143,15 +220,18 @@ const sampleData: Repository[] = [
         serviceName: "Shipping",
         endpoints: [
           {
-            name: "GetShippingMethods",
+            path: "/api/v1/shipping/methods",
+            method: "get",
             operations: ["shippingMethodId", "name", "description", "cost", "estimatedDeliveryDays"],
           },
           {
-            name: "TrackShipment",
+            path: "/api/v1/shipping/track/{trackingNumber}",
+            method: "get",
             operations: ["trackingNumber", "carrier", "status", "estimatedDeliveryDate", "trackingEvents"],
           },
           {
-            name: "CreateShipment",
+            path: "/api/v1/shipping/shipments",
+            method: "post",
             operations: [
               "orderId",
               "shippingMethodId",
@@ -171,13 +251,16 @@ export default function ServiceExplorerPage() {
   // State for selected repositories, services, endpoints, and active service
   const [selectedRepositoryIds, setSelectedRepositoryIds] = useState<string[]>([])
   const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([])
-  const [selectedEndpointNames, setSelectedEndpointNames] = useState<string[]>([])
+  const [selectedEndpointPaths, setSelectedEndpointPaths] = useState<string[]>([])
+  const [selectedSoapOperations, setSelectedSoapOperations] = useState<string[]>([])
   const [activeServiceName, setActiveServiceName] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedRepositories, setExpandedRepositories] = useState<string[]>([])
   const [expandedServices, setExpandedServices] = useState<string[]>([])
+  const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+  const [tooltipContent, setTooltipContent] = useState<{ text: string; x: number; y: number } | null>(null)
 
   // Get the selected repositories
   const selectedRepositories = useMemo(() => {
@@ -210,7 +293,7 @@ export default function ServiceExplorerPage() {
       repo.services.forEach((service) => {
         if (selectedServiceNames.includes(service.serviceName)) {
           service.endpoints.forEach((endpoint) => {
-            if (selectedEndpointNames.includes(endpoint.name)) {
+            if (selectedEndpointPaths.includes(endpoint.path)) {
               endpoints.push({ endpoint, serviceName: service.serviceName })
             }
           })
@@ -218,22 +301,30 @@ export default function ServiceExplorerPage() {
       })
     })
     return endpoints
-  }, [selectedRepositories, selectedServiceNames, selectedEndpointNames])
+  }, [selectedRepositories, selectedServiceNames, selectedEndpointPaths])
 
   // Get operations for the active service and selected endpoints
   const selectedOperations = useMemo(() => {
     if (!activeService) return []
 
-    const operations: { operation: string; endpointName: string }[] = []
+    const operations: { operation: string; endpointPath: string; method: string }[] = []
     activeService.endpoints.forEach((endpoint) => {
-      if (selectedEndpointNames.includes(endpoint.name)) {
+      if (selectedEndpointPaths.includes(endpoint.path) && endpoint.operations) {
         endpoint.operations.forEach((operation) => {
-          operations.push({ operation, endpointName: endpoint.name })
+          // For SOAP endpoints, only include selected operations
+          if (endpoint.method === "soap") {
+            if (selectedSoapOperations.includes(operation)) {
+              operations.push({ operation, endpointPath: endpoint.path, method: endpoint.method })
+            }
+          } else {
+            // For REST endpoints, include all operations
+            operations.push({ operation, endpointPath: endpoint.path, method: endpoint.method })
+          }
         })
       }
     })
     return operations
-  }, [activeService, selectedEndpointNames])
+  }, [activeService, selectedEndpointPaths, selectedSoapOperations])
 
   // Paginate the operations
   const paginatedOperations = useMemo(() => {
@@ -255,8 +346,10 @@ export default function ServiceExplorerPage() {
           service.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           service.endpoints.some(
             (endpoint) =>
-              endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              endpoint.operations.some((operation) => operation.toLowerCase().includes(searchQuery.toLowerCase())),
+              endpoint.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              endpoint.method.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (endpoint.operations &&
+                endpoint.operations.some((operation) => operation.toLowerCase().includes(searchQuery.toLowerCase()))),
           ),
       )
 
@@ -292,12 +385,45 @@ export default function ServiceExplorerPage() {
   }
 
   // Handle endpoint selection
-  const handleEndpointSelect = (endpointName: string) => {
-    setSelectedEndpointNames((prev) => {
-      if (prev.includes(endpointName)) {
-        return prev.filter((name) => name !== endpointName)
+  const handleEndpointSelect = (endpointPath: string, isSoap: boolean) => {
+    setSelectedEndpointPaths((prev) => {
+      if (prev.includes(endpointPath)) {
+        return prev.filter((path) => path !== endpointPath)
       } else {
-        return [...prev, endpointName]
+        return [...prev, endpointPath]
+      }
+    })
+
+    // Toggle endpoint expansion for SOAP endpoints
+    if (isSoap) {
+      setExpandedEndpoints((prev) => {
+        if (prev.includes(endpointPath)) {
+          return prev.filter((path) => path !== endpointPath)
+        } else {
+          return [...prev, endpointPath]
+        }
+      })
+    }
+  }
+
+  // Handle SOAP operation selection
+  const handleSoapOperationSelect = (operation: string) => {
+    setSelectedSoapOperations((prev) => {
+      if (prev.includes(operation)) {
+        return prev.filter((op) => op !== operation)
+      } else {
+        return [...prev, operation]
+      }
+    })
+  }
+
+  // Toggle endpoint expansion
+  const toggleEndpoint = (endpointPath: string) => {
+    setExpandedEndpoints((prev) => {
+      if (prev.includes(endpointPath)) {
+        return prev.filter((path) => path !== endpointPath)
+      } else {
+        return [...prev, endpointPath]
       }
     })
   }
@@ -326,18 +452,69 @@ export default function ServiceExplorerPage() {
 
   // Clear selected endpoints and services
   const clearSelectedEndpoints = () => {
-    setSelectedEndpointNames([])
+    setSelectedEndpointPaths([])
     setSelectedServiceNames([])
+    setSelectedSoapOperations([])
     setActiveServiceName(null)
+  }
+
+  // Show tooltip
+  const showTooltip = (text: string, event: React.MouseEvent) => {
+    setTooltipContent({
+      text,
+      x: event.clientX,
+      y: event.clientY,
+    })
+  }
+
+  // Hide tooltip
+  const hideTooltip = () => {
+    setTooltipContent(null)
+  }
+
+  // Get method badge color
+  const getMethodBadgeStyle = (method: string) => {
+    switch (method.toLowerCase()) {
+      case "get":
+        return {
+          backgroundColor: "#DBEAFE",
+          color: "#1E40AF",
+        }
+      case "post":
+        return {
+          backgroundColor: "#DEF7EC",
+          color: "#046C4E",
+        }
+      case "put":
+        return {
+          backgroundColor: "#FEF3C7",
+          color: "#92400E",
+        }
+      case "delete":
+        return {
+          backgroundColor: "#FEE2E2",
+          color: "#B91C1C",
+        }
+      case "soap":
+        return {
+          backgroundColor: "#E0E7FF",
+          color: "#4338CA",
+        }
+      default:
+        return {
+          backgroundColor: "#F3F4F6",
+          color: "#4B5563",
+        }
+    }
   }
 
   // Styles - Updated to blue color scheme and English text
   const styles = {
     container: {
-      maxWidth: "1280px",
       margin: "0 auto",
       padding: "16px",
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
+      position: "relative" as const,
     },
     gridContainer: {
       display: "grid",
@@ -453,6 +630,7 @@ export default function ServiceExplorerPage() {
       fontWeight: "600",
       flex: 1,
       fontSize: "14px",
+      cursor: "pointer",
     },
     expandButton: {
       background: "none",
@@ -500,7 +678,26 @@ export default function ServiceExplorerPage() {
       cursor: "pointer",
       transition: "background-color 0.2s",
     },
-    endpointName: {
+    operationItem: {
+      display: "flex",
+      alignItems: "center",
+      padding: "10px 12px",
+      paddingLeft: "72px",
+      borderTop: "1px solid #E5E7EB",
+      cursor: "pointer",
+      transition: "background-color 0.2s",
+      backgroundColor: "#F3F4F6",
+    },
+    hoverItem: {
+      backgroundColor: "white",
+      transition: "background-color 0.2s",
+    },
+    endpointPath: {
+      flex: 1,
+      fontSize: "14px",
+      cursor: "pointer",
+    },
+    operationName: {
       flex: 1,
       fontSize: "14px",
     },
@@ -510,14 +707,6 @@ export default function ServiceExplorerPage() {
       fontSize: "12px",
       fontWeight: "500",
       textTransform: "uppercase" as const,
-    },
-    methodRest: {
-      backgroundColor: "#DBEAFE",
-      color: "#1E40AF",
-    },
-    methodPost: {
-      backgroundColor: "#DEF7EC",
-      color: "#046C4E",
     },
     mainContent: {
       display: "flex",
@@ -640,10 +829,35 @@ export default function ServiceExplorerPage() {
       color: "white",
       borderColor: "#2563EB",
     },
+    tooltip: {
+      position: "fixed" as const,
+      zIndex: 1000,
+      backgroundColor: "#333",
+      color: "white",
+      padding: "8px 12px",
+      borderRadius: "4px",
+      fontSize: "12px",
+      maxWidth: "300px",
+      wordBreak: "break-all" as const,
+      boxShadow: "0 2px 10px rgba(0, 0, 0, 0.2)",
+    },
   }
 
   return (
     <div style={styles.container}>
+      {/* Tooltip */}
+      {tooltipContent && (
+        <div
+          style={{
+            ...styles.tooltip,
+            left: tooltipContent.x + 10,
+            top: tooltipContent.y + 10,
+          }}
+        >
+          {tooltipContent.text}
+        </div>
+      )}
+
       <div style={styles.gridContainer}>
         {/* Sidebar */}
         <div>
@@ -669,8 +883,18 @@ export default function ServiceExplorerPage() {
             <button
               style={{
                 ...styles.clearSelectionButton,
-                opacity: selectedEndpointNames.length > 0 ? 1 : 0.5,
-                cursor: selectedEndpointNames.length > 0 ? "pointer" : "default",
+                opacity:
+                  selectedEndpointPaths.length > 0 ||
+                  selectedServiceNames.length > 0 ||
+                  selectedSoapOperations.length > 0
+                    ? 1
+                    : 0.5,
+                cursor:
+                  selectedEndpointPaths.length > 0 ||
+                  selectedServiceNames.length > 0 ||
+                  selectedSoapOperations.length > 0
+                    ? "pointer"
+                    : "default",
               }}
               onClick={clearSelectedEndpoints}
             >
@@ -691,7 +915,12 @@ export default function ServiceExplorerPage() {
                     ...(selectedRepositoryIds.includes(repo.id) ? styles.repoButtonSelected : {}),
                   }}
                 >
-                  {repo.id.toUpperCase()}
+                  <TruncatedText
+                    text={repo.id.toUpperCase()}
+                    maxLength={15}
+                    onShowTooltip={showTooltip}
+                    onHideTooltip={hideTooltip}
+                  />
                 </button>
               ))}
             </div>
@@ -703,7 +932,14 @@ export default function ServiceExplorerPage() {
                 <div key={repo.id} style={styles.repoItem}>
                   {/* Repository Header */}
                   <div style={styles.repoHeader} onClick={() => toggleRepository(repo.id)}>
-                    <span style={styles.repoName}>{repo.id.toUpperCase()}</span>
+                    <span style={styles.repoName}>
+                      <TruncatedText
+                        text={repo.id.toUpperCase()}
+                        maxLength={20}
+                        onShowTooltip={showTooltip}
+                        onHideTooltip={hideTooltip}
+                      />
+                    </span>
                     <button style={styles.expandButton}>{expandedRepositories.includes(repo.id) ? "▼" : "▶"}</button>
                   </div>
 
@@ -723,6 +959,14 @@ export default function ServiceExplorerPage() {
                                 backgroundColor: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
                               }}
                               onClick={() => toggleService(service.serviceName)}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "white"
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = isSelected
+                                  ? "rgba(37, 99, 235, 0.05)"
+                                  : "transparent"
+                              }}
                             >
                               <input
                                 type="checkbox"
@@ -734,7 +978,12 @@ export default function ServiceExplorerPage() {
                                 }}
                               />
                               <div style={styles.serviceName}>
-                                <span>{service.serviceName}</span>
+                                <TruncatedText
+                                  text={service.serviceName}
+                                  maxLength={25}
+                                  onShowTooltip={showTooltip}
+                                  onHideTooltip={hideTooltip}
+                                />
                               </div>
                               <button style={styles.expandButton}>{isExpanded ? "▼" : "▶"}</button>
                             </div>
@@ -742,33 +991,102 @@ export default function ServiceExplorerPage() {
                             {/* Endpoints */}
                             {isExpanded && (
                               <div style={styles.endpointList}>
-                                {service.endpoints.map((endpoint) => {
-                                  const isEndpointSelected = selectedEndpointNames.includes(endpoint.name)
+                                {service.endpoints.map((endpoint, index) => {
+                                  const isEndpointSelected = selectedEndpointPaths.includes(endpoint.path)
+                                  const isEndpointExpanded = expandedEndpoints.includes(endpoint.path)
+                                  const isSoap = endpoint.method === "soap"
 
                                   return (
-                                    <div
-                                      key={endpoint.name}
-                                      style={{
-                                        ...styles.endpointItem,
-                                        backgroundColor: isEndpointSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        style={styles.checkbox}
-                                        checked={isEndpointSelected}
-                                        onChange={() => handleEndpointSelect(endpoint.name)}
-                                        disabled={!isSelected}
-                                      />
-                                      <span style={styles.endpointName}>{endpoint.name}</span>
-                                      <span
+                                    <div key={`${endpoint.path}-${index}`}>
+                                      {/* Endpoint Item */}
+                                      <div
                                         style={{
-                                          ...styles.methodBadge,
-                                          ...(repo.method === "rest" ? styles.methodRest : styles.methodPost),
+                                          ...styles.endpointItem,
+                                          backgroundColor: isEndpointSelected
+                                            ? "rgba(37, 99, 235, 0.05)"
+                                            : "transparent",
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = "white"
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = isEndpointSelected
+                                            ? "rgba(37, 99, 235, 0.05)"
+                                            : "transparent"
                                         }}
                                       >
-                                        {repo.method}
-                                      </span>
+                                        <input
+                                          type="checkbox"
+                                          style={styles.checkbox}
+                                          checked={isEndpointSelected}
+                                          onChange={() => handleEndpointSelect(endpoint.path, isSoap)}
+                                          disabled={!isSelected}
+                                        />
+                                        <span style={styles.endpointPath}>
+                                          <TruncatedText
+                                            text={endpoint.path}
+                                            maxLength={20}
+                                            onShowTooltip={showTooltip}
+                                            onHideTooltip={hideTooltip}
+                                          />
+                                        </span>
+                                        <span
+                                          style={{
+                                            ...styles.methodBadge,
+                                            ...getMethodBadgeStyle(endpoint.method),
+                                          }}
+                                        >
+                                          {endpoint.method}
+                                        </span>
+                                        {isSoap && (
+                                          <button
+                                            style={styles.expandButton}
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              toggleEndpoint(endpoint.path)
+                                            }}
+                                          >
+                                            {isEndpointExpanded ? "▼" : "▶"}
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* SOAP Operations (nested under endpoint) */}
+                                      {isSoap && isEndpointExpanded && endpoint.operations && (
+                                        <div>
+                                          {endpoint.operations.map((operation) => {
+                                            const isOperationSelected = selectedSoapOperations.includes(operation)
+                                            return (
+                                              <div
+                                                key={`${endpoint.path}-${operation}`}
+                                                style={{
+                                                  ...styles.operationItem,
+                                                  backgroundColor: isOperationSelected
+                                                    ? "rgba(37, 99, 235, 0.05)"
+                                                    : "#F3F4F6",
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                  e.currentTarget.style.backgroundColor = "white"
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                  e.currentTarget.style.backgroundColor = isOperationSelected
+                                                    ? "rgba(37, 99, 235, 0.05)"
+                                                    : "#F3F4F6"
+                                                }}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  style={styles.checkbox}
+                                                  checked={isOperationSelected}
+                                                  onChange={() => handleSoapOperationSelect(operation)}
+                                                  disabled={!isEndpointSelected}
+                                                />
+                                                <span style={styles.operationName}>{operation}</span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   )
                                 })}
@@ -809,7 +1127,13 @@ export default function ServiceExplorerPage() {
                     }}
                     onClick={() => handleServiceTabChange(service.serviceName)}
                   >
-                    <span style={styles.tabIcon}>🔗</span> {service.serviceName}
+                    <span style={styles.tabIcon}>🔗</span>
+                    <TruncatedText
+                      text={service.serviceName}
+                      maxLength={20}
+                      onShowTooltip={showTooltip}
+                      onHideTooltip={hideTooltip}
+                    />
                   </button>
                 ))}
               </div>
@@ -818,7 +1142,7 @@ export default function ServiceExplorerPage() {
               <button style={styles.addButton}>Add</button>
 
               {/* Placeholder for the table component */}
-              {activeService && selectedEndpointNames.length > 0 ? (
+              {activeService && (selectedEndpointPaths.length > 0 || selectedSoapOperations.length > 0) ? (
                 <div style={styles.tableContainer}>
                   {/* This is where you'll integrate your table component */}
                   <div style={{ padding: "16px", borderBottom: "1px solid #E5E7EB" }}>
