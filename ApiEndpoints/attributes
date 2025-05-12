@@ -1,0 +1,910 @@
+"use client"
+
+import { useState, useMemo } from "react"
+
+// Define the types based on the provided data format
+interface Operation {
+  name: string
+}
+
+interface Endpoint {
+  name: string
+  operations: string[]
+}
+
+interface Service {
+  serviceName: string
+  endpoints: Endpoint[]
+}
+
+interface Repository {
+  id: string
+  method: "rest" | "post"
+  services: Service[]
+}
+
+// Sample data based on the new format
+const sampleData: Repository[] = [
+  {
+    id: "customer-api",
+    method: "rest",
+    services: [
+      {
+        serviceName: "CustomerManagement",
+        endpoints: [
+          {
+            name: "GetCustomers",
+            operations: ["customerId", "customerName", "customerEmail", "customerPhone"],
+          },
+          {
+            name: "CreateCustomer",
+            operations: ["firstName", "lastName", "email", "phoneNumber", "address"],
+          },
+          {
+            name: "UpdateCustomer",
+            operations: ["customerId", "firstName", "lastName", "email"],
+          },
+        ],
+      },
+      {
+        serviceName: "CustomerPreferences",
+        endpoints: [
+          {
+            name: "GetPreferences",
+            operations: ["customerId", "communicationPreferences", "marketingConsent"],
+          },
+          {
+            name: "UpdatePreferences",
+            operations: ["customerId", "communicationPreferences", "marketingConsent"],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "product-api",
+    method: "rest",
+    services: [
+      {
+        serviceName: "ProductCatalog",
+        endpoints: [
+          {
+            name: "GetProducts",
+            operations: ["productId", "productName", "price", "category", "inStock"],
+          },
+          {
+            name: "GetProductDetails",
+            operations: ["productId", "productName", "description", "price", "category", "specifications"],
+          },
+          {
+            name: "CreateProduct",
+            operations: ["productName", "description", "price", "category", "specifications"],
+          },
+        ],
+      },
+      {
+        serviceName: "InventoryManagement",
+        endpoints: [
+          {
+            name: "GetInventory",
+            operations: ["productId", "warehouseId", "quantity", "lastUpdated"],
+          },
+          {
+            name: "UpdateInventory",
+            operations: ["productId", "warehouseId", "quantity", "reason"],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "order-api",
+    method: "rest",
+    services: [
+      {
+        serviceName: "OrderManagement",
+        endpoints: [
+          {
+            name: "GetOrders",
+            operations: ["orderId", "customerId", "orderDate", "totalAmount", "status"],
+          },
+          {
+            name: "GetOrderDetails",
+            operations: [
+              "orderId",
+              "customerId",
+              "orderDate",
+              "items",
+              "shippingAddress",
+              "billingAddress",
+              "paymentMethod",
+              "subtotal",
+              "tax",
+              "shippingCost",
+              "totalAmount",
+              "status",
+            ],
+          },
+          {
+            name: "CreateOrder",
+            operations: ["customerId", "items", "shippingAddress", "billingAddress", "paymentMethod"],
+          },
+          {
+            name: "UpdateOrderStatus",
+            operations: ["orderId", "status", "statusReason", "updatedBy"],
+          },
+          {
+            name: "CancelOrder",
+            operations: ["orderId", "cancellationReason", "requestedBy"],
+          },
+        ],
+      },
+      {
+        serviceName: "Shipping",
+        endpoints: [
+          {
+            name: "GetShippingMethods",
+            operations: ["shippingMethodId", "name", "description", "cost", "estimatedDeliveryDays"],
+          },
+          {
+            name: "TrackShipment",
+            operations: ["trackingNumber", "carrier", "status", "estimatedDeliveryDate", "trackingEvents"],
+          },
+          {
+            name: "CreateShipment",
+            operations: [
+              "orderId",
+              "shippingMethodId",
+              "items",
+              "shippingAddress",
+              "packageDimensions",
+              "packageWeight",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+]
+
+export default function ServiceExplorerPage() {
+  // State for selected repositories, services, endpoints, and active service
+  const [selectedRepositoryIds, setSelectedRepositoryIds] = useState<string[]>([])
+  const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([])
+  const [selectedEndpointNames, setSelectedEndpointNames] = useState<string[]>([])
+  const [activeServiceName, setActiveServiceName] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [expandedRepositories, setExpandedRepositories] = useState<string[]>([])
+  const [expandedServices, setExpandedServices] = useState<string[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  // Get the selected repositories
+  const selectedRepositories = useMemo(() => {
+    return sampleData.filter((repo) => selectedRepositoryIds.includes(repo.id))
+  }, [selectedRepositoryIds])
+
+  // Get all selected services
+  const selectedServices = useMemo(() => {
+    const services: Service[] = []
+    selectedRepositories.forEach((repo) => {
+      repo.services.forEach((service) => {
+        if (selectedServiceNames.includes(service.serviceName)) {
+          services.push(service)
+        }
+      })
+    })
+    return services
+  }, [selectedRepositories, selectedServiceNames])
+
+  // Get the active service for the tabs
+  const activeService = useMemo(() => {
+    if (!activeServiceName || selectedServices.length === 0) return selectedServices[0] || null
+    return selectedServices.find((service) => service.serviceName === activeServiceName) || selectedServices[0] || null
+  }, [activeServiceName, selectedServices])
+
+  // Get all selected endpoints
+  const selectedEndpoints = useMemo(() => {
+    const endpoints: { endpoint: Endpoint; serviceName: string }[] = []
+    selectedRepositories.forEach((repo) => {
+      repo.services.forEach((service) => {
+        if (selectedServiceNames.includes(service.serviceName)) {
+          service.endpoints.forEach((endpoint) => {
+            if (selectedEndpointNames.includes(endpoint.name)) {
+              endpoints.push({ endpoint, serviceName: service.serviceName })
+            }
+          })
+        }
+      })
+    })
+    return endpoints
+  }, [selectedRepositories, selectedServiceNames, selectedEndpointNames])
+
+  // Get operations for the active service and selected endpoints
+  const selectedOperations = useMemo(() => {
+    if (!activeService) return []
+
+    const operations: { operation: string; endpointName: string }[] = []
+    activeService.endpoints.forEach((endpoint) => {
+      if (selectedEndpointNames.includes(endpoint.name)) {
+        endpoint.operations.forEach((operation) => {
+          operations.push({ operation, endpointName: endpoint.name })
+        })
+      }
+    })
+    return operations
+  }, [activeService, selectedEndpointNames])
+
+  // Paginate the operations
+  const paginatedOperations = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return selectedOperations.slice(startIndex, startIndex + itemsPerPage)
+  }, [selectedOperations, currentPage])
+
+  const totalPages = Math.ceil(selectedOperations.length / itemsPerPage)
+
+  // Filter repositories and services based on search query
+  const filteredRepositories = useMemo(() => {
+    if (!searchQuery) return sampleData
+
+    return sampleData.filter((repo) => {
+      const repoMatches = repo.id.toLowerCase().includes(searchQuery.toLowerCase())
+
+      const serviceMatches = repo.services.some(
+        (service) =>
+          service.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          service.endpoints.some(
+            (endpoint) =>
+              endpoint.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              endpoint.operations.some((operation) => operation.toLowerCase().includes(searchQuery.toLowerCase())),
+          ),
+      )
+
+      return repoMatches || serviceMatches
+    })
+  }, [searchQuery])
+
+  // Handle repository selection
+  const handleRepositorySelect = (repoId: string) => {
+    setSelectedRepositoryIds((prev) => {
+      if (prev.includes(repoId)) {
+        return prev.filter((id) => id !== repoId)
+      } else {
+        return [...prev, repoId]
+      }
+    })
+  }
+
+  // Handle service selection
+  const handleServiceSelect = (serviceName: string) => {
+    setSelectedServiceNames((prev) => {
+      if (prev.includes(serviceName)) {
+        return prev.filter((name) => name !== serviceName)
+      } else {
+        return [...prev, serviceName]
+      }
+    })
+
+    // Set as active service if it's the first one selected
+    if (selectedServiceNames.length === 0) {
+      setActiveServiceName(serviceName)
+    }
+  }
+
+  // Handle endpoint selection
+  const handleEndpointSelect = (endpointName: string) => {
+    setSelectedEndpointNames((prev) => {
+      if (prev.includes(endpointName)) {
+        return prev.filter((name) => name !== endpointName)
+      } else {
+        return [...prev, endpointName]
+      }
+    })
+  }
+
+  // Handle service tab change
+  const handleServiceTabChange = (serviceName: string) => {
+    setActiveServiceName(serviceName)
+  }
+
+  // Toggle repository expansion
+  const toggleRepository = (repoId: string) => {
+    setExpandedRepositories((prev) => (prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]))
+  }
+
+  // Toggle service expansion
+  const toggleService = (serviceName: string) => {
+    setExpandedServices((prev) =>
+      prev.includes(serviceName) ? prev.filter((name) => name !== serviceName) : [...prev, serviceName],
+    )
+  }
+
+  // Handle page change for pagination
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  // Clear selected endpoints and services
+  const clearSelectedEndpoints = () => {
+    setSelectedEndpointNames([])
+    setSelectedServiceNames([])
+    setActiveServiceName(null)
+  }
+
+  // Styles - Updated to blue color scheme and English text
+  const styles = {
+    container: {
+      maxWidth: "1280px",
+      margin: "0 auto",
+      padding: "16px",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
+    },
+    gridContainer: {
+      display: "grid",
+      gridTemplateColumns: "1fr 2fr",
+      gap: "24px",
+    },
+    sidebarHeader: {
+      fontSize: "18px",
+      fontWeight: "600",
+      marginBottom: "8px",
+      display: "flex",
+      alignItems: "center",
+      color: "#111827",
+    },
+    badge: {
+      backgroundColor: "rgba(37, 99, 235, 0.1)",
+      color: "#2563EB",
+      padding: "2px 8px",
+      borderRadius: "4px",
+      fontSize: "14px",
+      marginLeft: "8px",
+      fontWeight: "500",
+    },
+    searchContainer: {
+      position: "relative",
+      marginBottom: "16px",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    },
+    searchInput: {
+      flex: "1",
+      padding: "10px 12px",
+      paddingLeft: "36px",
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      fontSize: "14px",
+    },
+    searchIcon: {
+      position: "absolute",
+      left: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#9CA3AF",
+      fontSize: "16px",
+    },
+    clearButton: {
+      position: "absolute",
+      right: "12px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: "#9CA3AF",
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "14px",
+    },
+    clearSelectionButton: {
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+      color: "#2563EB",
+      background: "none",
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      cursor: "pointer",
+      fontSize: "14px",
+      padding: "8px 12px",
+      whiteSpace: "nowrap" as const,
+    },
+    repoList: {
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      overflow: "hidden",
+      maxHeight: "600px",
+      overflowY: "auto",
+      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+    },
+    repoSelector: {
+      padding: "12px",
+      backgroundColor: "#F9FAFB",
+      borderBottom: "1px solid #E5E7EB",
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "8px",
+    },
+    repoButton: {
+      padding: "6px 12px",
+      borderRadius: "4px",
+      fontSize: "14px",
+      cursor: "pointer",
+      border: "1px solid #E5E7EB",
+      backgroundColor: "white",
+      transition: "all 0.2s",
+    },
+    repoButtonSelected: {
+      backgroundColor: "#2563EB",
+      color: "white",
+      border: "1px solid #2563EB",
+    },
+    repoItem: {
+      borderBottom: "1px solid #E5E7EB",
+    },
+    repoHeader: {
+      display: "flex",
+      alignItems: "center",
+      padding: "12px",
+      cursor: "pointer",
+      backgroundColor: "#F3F4F6",
+      fontWeight: "500",
+    },
+    repoName: {
+      fontWeight: "600",
+      flex: 1,
+      fontSize: "14px",
+    },
+    expandButton: {
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: "4px",
+      color: "#6B7280",
+      fontSize: "12px",
+    },
+    serviceItem: {
+      borderBottom: "1px solid #E5E7EB",
+    },
+    serviceHeader: {
+      display: "flex",
+      alignItems: "center",
+      padding: "10px 12px",
+      paddingLeft: "24px",
+      cursor: "pointer",
+      transition: "background-color 0.2s",
+    },
+    checkbox: {
+      marginRight: "8px",
+      cursor: "pointer",
+    },
+    serviceName: {
+      flex: 1,
+      fontSize: "14px",
+      display: "flex",
+      alignItems: "center",
+    },
+    serviceVersion: {
+      fontSize: "12px",
+      color: "#6B7280",
+      marginLeft: "6px",
+    },
+    endpointList: {
+      backgroundColor: "#F9FAFB",
+    },
+    endpointItem: {
+      display: "flex",
+      alignItems: "center",
+      padding: "10px 12px",
+      paddingLeft: "48px",
+      borderTop: "1px solid #E5E7EB",
+      cursor: "pointer",
+      transition: "background-color 0.2s",
+    },
+    endpointName: {
+      flex: 1,
+      fontSize: "14px",
+    },
+    methodBadge: {
+      padding: "2px 8px",
+      borderRadius: "4px",
+      fontSize: "12px",
+      fontWeight: "500",
+      textTransform: "uppercase" as const,
+    },
+    methodRest: {
+      backgroundColor: "#DBEAFE",
+      color: "#1E40AF",
+    },
+    methodPost: {
+      backgroundColor: "#DEF7EC",
+      color: "#046C4E",
+    },
+    mainContent: {
+      display: "flex",
+      flexDirection: "column" as const,
+    },
+    contentHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "16px",
+    },
+    contentTitle: {
+      fontSize: "18px",
+      fontWeight: "600",
+      color: "#111827",
+    },
+    tabsContainer: {
+      display: "flex",
+      borderBottom: "1px solid #E5E7EB",
+      marginBottom: "16px",
+      overflowX: "auto",
+    },
+    tab: {
+      padding: "8px 16px",
+      borderBottom: "2px solid transparent",
+      cursor: "pointer",
+      whiteSpace: "nowrap" as const,
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      fontSize: "14px",
+      fontWeight: "500",
+      color: "#6B7280",
+      transition: "all 0.2s",
+    },
+    activeTab: {
+      borderBottom: "2px solid #2563EB",
+      color: "#2563EB",
+    },
+    tabIcon: {
+      fontSize: "16px",
+      color: "inherit",
+    },
+    addButton: {
+      padding: "8px 16px",
+      backgroundColor: "#2563EB",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer",
+      marginBottom: "16px",
+      fontSize: "14px",
+      fontWeight: "500",
+      transition: "background-color 0.2s",
+    },
+    emptyState: {
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      padding: "32px",
+      textAlign: "center" as const,
+      backgroundColor: "#F9FAFB",
+      color: "#6B7280",
+      fontSize: "14px",
+    },
+    tableContainer: {
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      overflow: "hidden",
+      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+    },
+    pagination: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "12px 16px",
+      borderTop: "1px solid #E5E7EB",
+      backgroundColor: "#F9FAFB",
+    },
+    paginationInfo: {
+      fontSize: "14px",
+      color: "#6B7280",
+    },
+    paginationControls: {
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+    },
+    paginationButton: {
+      padding: "6px 10px",
+      borderRadius: "4px",
+      border: "1px solid #E5E7EB",
+      cursor: "pointer",
+      backgroundColor: "white",
+      color: "#4B5563",
+      fontSize: "14px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    paginationButtonDisabled: {
+      color: "#D1D5DB",
+      cursor: "not-allowed",
+      borderColor: "#F3F4F6",
+    },
+    pageButton: {
+      width: "32px",
+      height: "32px",
+      borderRadius: "4px",
+      border: "1px solid #E5E7EB",
+      cursor: "pointer",
+      backgroundColor: "white",
+      color: "#4B5563",
+      fontSize: "14px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    activePageButton: {
+      backgroundColor: "#2563EB",
+      color: "white",
+      borderColor: "#2563EB",
+    },
+  }
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.gridContainer}>
+        {/* Sidebar */}
+        <div>
+          <div style={styles.sidebarHeader}>{/* Header space maintained but content removed */}</div>
+
+          {/* Search and Clear Selection */}
+          <div style={styles.searchContainer}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <input
+                type="text"
+                placeholder="Search repositories, services or endpoints..."
+                style={styles.searchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span style={styles.searchIcon}>🔍</span>
+              {searchQuery && (
+                <button style={styles.clearButton} onClick={() => setSearchQuery("")}>
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              style={{
+                ...styles.clearSelectionButton,
+                opacity: selectedEndpointNames.length > 0 ? 1 : 0.5,
+                cursor: selectedEndpointNames.length > 0 ? "pointer" : "default",
+              }}
+              onClick={clearSelectedEndpoints}
+            >
+              ✕ Clear selection
+            </button>
+          </div>
+
+          {/* Repository List */}
+          <div style={styles.repoList}>
+            {/* Repository Selector */}
+            <div style={styles.repoSelector}>
+              {sampleData.map((repo) => (
+                <button
+                  key={repo.id}
+                  onClick={() => handleRepositorySelect(repo.id)}
+                  style={{
+                    ...styles.repoButton,
+                    ...(selectedRepositoryIds.includes(repo.id) ? styles.repoButtonSelected : {}),
+                  }}
+                >
+                  {repo.id.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            {/* Selected Repositories */}
+            {filteredRepositories
+              .filter((repo) => selectedRepositoryIds.includes(repo.id))
+              .map((repo) => (
+                <div key={repo.id} style={styles.repoItem}>
+                  {/* Repository Header */}
+                  <div style={styles.repoHeader} onClick={() => toggleRepository(repo.id)}>
+                    <span style={styles.repoName}>{repo.id.toUpperCase()}</span>
+                    <button style={styles.expandButton}>{expandedRepositories.includes(repo.id) ? "▼" : "▶"}</button>
+                  </div>
+
+                  {/* Services */}
+                  {expandedRepositories.includes(repo.id) && (
+                    <div>
+                      {repo.services.map((service) => {
+                        const isExpanded = expandedServices.includes(service.serviceName)
+                        const isSelected = selectedServiceNames.includes(service.serviceName)
+
+                        return (
+                          <div key={service.serviceName} style={styles.serviceItem}>
+                            {/* Service Header */}
+                            <div
+                              style={{
+                                ...styles.serviceHeader,
+                                backgroundColor: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
+                              }}
+                              onClick={() => toggleService(service.serviceName)}
+                            >
+                              <input
+                                type="checkbox"
+                                style={styles.checkbox}
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  e.stopPropagation()
+                                  handleServiceSelect(service.serviceName)
+                                }}
+                              />
+                              <div style={styles.serviceName}>
+                                <span>{service.serviceName}</span>
+                              </div>
+                              <button style={styles.expandButton}>{isExpanded ? "▼" : "▶"}</button>
+                            </div>
+
+                            {/* Endpoints */}
+                            {isExpanded && (
+                              <div style={styles.endpointList}>
+                                {service.endpoints.map((endpoint) => {
+                                  const isEndpointSelected = selectedEndpointNames.includes(endpoint.name)
+
+                                  return (
+                                    <div
+                                      key={endpoint.name}
+                                      style={{
+                                        ...styles.endpointItem,
+                                        backgroundColor: isEndpointSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        style={styles.checkbox}
+                                        checked={isEndpointSelected}
+                                        onChange={() => handleEndpointSelect(endpoint.name)}
+                                        disabled={!isSelected}
+                                      />
+                                      <span style={styles.endpointName}>{endpoint.name}</span>
+                                      <span
+                                        style={{
+                                          ...styles.methodBadge,
+                                          ...(repo.method === "rest" ? styles.methodRest : styles.methodPost),
+                                        }}
+                                      >
+                                        {repo.method}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+            {selectedRepositoryIds.length === 0 && (
+              <div style={{ padding: "16px", textAlign: "center", color: "#6B7280", fontSize: "14px" }}>
+                Select repositories to view their services
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div style={styles.mainContent}>
+          <div style={styles.contentHeader}>
+            <h2 style={styles.contentTitle}>Attributes</h2>
+          </div>
+
+          {selectedServiceNames.length > 0 ? (
+            <>
+              {/* Service Tabs */}
+              <div style={styles.tabsContainer}>
+                {selectedServices.map((service) => (
+                  <button
+                    key={service.serviceName}
+                    style={{
+                      ...styles.tab,
+                      ...(service.serviceName === activeService?.serviceName ? styles.activeTab : {}),
+                    }}
+                    onClick={() => handleServiceTabChange(service.serviceName)}
+                  >
+                    <span style={styles.tabIcon}>🔗</span> {service.serviceName}
+                  </button>
+                ))}
+              </div>
+
+              {/* Add Button */}
+              <button style={styles.addButton}>Add</button>
+
+              {/* Placeholder for the table component */}
+              {activeService && selectedEndpointNames.length > 0 ? (
+                <div style={styles.tableContainer}>
+                  {/* This is where you'll integrate your table component */}
+                  <div style={{ padding: "16px", borderBottom: "1px solid #E5E7EB" }}>
+                    <p style={{ fontSize: "14px", color: "#4B5563" }}>
+                      Operations table for {activeService.serviceName} - {selectedOperations.length} operations found
+                    </p>
+                    <p style={{ fontSize: "12px", color: "#9CA3AF", marginTop: "4px" }}>
+                      (Your table component will be integrated here)
+                    </p>
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div style={styles.pagination}>
+                      <div style={styles.paginationInfo}>
+                        Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                        {Math.min(currentPage * itemsPerPage, selectedOperations.length)} of {selectedOperations.length}{" "}
+                        operations
+                      </div>
+                      <div style={styles.paginationControls}>
+                        <button
+                          onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          style={{
+                            ...styles.paginationButton,
+                            ...(currentPage === 1 ? styles.paginationButtonDisabled : {}),
+                          }}
+                        >
+                          ◀
+                        </button>
+
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageToShow
+                          if (totalPages <= 5) {
+                            pageToShow = i + 1
+                          } else if (currentPage <= 3) {
+                            pageToShow = i + 1
+                          } else if (currentPage >= totalPages - 2) {
+                            pageToShow = totalPages - 4 + i
+                          } else {
+                            pageToShow = currentPage - 2 + i
+                          }
+
+                          return (
+                            <button
+                              key={pageToShow}
+                              onClick={() => handlePageChange(pageToShow)}
+                              style={{
+                                ...styles.pageButton,
+                                ...(currentPage === pageToShow ? styles.activePageButton : {}),
+                              }}
+                            >
+                              {pageToShow}
+                            </button>
+                          )
+                        })}
+
+                        <button
+                          onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          style={{
+                            ...styles.paginationButton,
+                            ...(currentPage === totalPages ? styles.paginationButtonDisabled : {}),
+                          }}
+                        >
+                          ▶
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={styles.emptyState}>
+                  <p>Select endpoints to view their operations</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={styles.emptyState}>
+              <p>
+                {selectedRepositoryIds.length > 0 ? "Select a service to continue" : "Select a repository to begin"}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
