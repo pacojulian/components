@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 
 // Add this import for the info icon
 import { Info } from "lucide-react"
@@ -262,6 +262,21 @@ export default function ServiceExplorerPage() {
   const itemsPerPage = 10
   const [tooltipContent, setTooltipContent] = useState<{ text: string; x: number; y: number } | null>(null)
 
+    // Initialize repositories from props when component mounts
+  useEffect(() => {
+    console.log("Initializing repositories from props:", sampleData)
+    setRepositories(sampleData)
+  }, [])
+
+  useEffect(() => {
+    console.log("Selected repository IDs changed:", selectedRepositoryIds)
+  }, [selectedRepositoryIds])
+
+  // Add a useEffect to log when repositories change
+  // Add this after the other useEffects:
+  useEffect(() => {
+    console.log("Repositories state updated:", repositories)
+  }, [repositories])
   // Get the selected repositories
   const selectedRepositories = useMemo(() => {
     return sampleData.filter((repo) => selectedRepositoryIds.includes(repo.id))
