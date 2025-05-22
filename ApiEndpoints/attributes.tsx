@@ -383,14 +383,45 @@ export default function ServiceExplorerPage() {
     })
   }
 
-  // Handle service selection
+ // Handle service selection
   const handleServiceSelect = (serviceName: string) => {
     setSelectedServiceNames((prev) => {
-      if (prev.includes(serviceName)) {
-        return prev.filter((name) => name !== serviceName)
-      } else {
-        return [...prev, serviceName]
-      }
+      // Check if service is being selected or deselected
+      const isSelected = !prev.includes(serviceName)
+
+      // Update selected services list
+      const updatedServiceNames = isSelected ? [...prev, serviceName] : prev.filter((name) => name !== serviceName)
+
+      // Find all endpoints for this service
+      const serviceEndpoints: string[] = []
+      repositories.forEach((repo) => {
+        repo.services.forEach((service) => {
+          if (service.serviceName === serviceName) {
+            service.endpoints.forEach((endpoint) => {
+              serviceEndpoints.push(endpoint.path)
+            })
+          }
+        })
+      })
+
+      // Update selected endpoints based on service selection
+      setSelectedEndpointPaths((prevEndpoints) => {
+        if (isSelected) {
+          // Add all service endpoints if not already selected
+          const newEndpoints = [...prevEndpoints]
+          serviceEndpoints.forEach((path) => {
+            if (!newEndpoints.includes(path)) {
+              newEndpoints.push(path)
+            }
+          })
+          return newEndpoints
+        } else {
+          // Remove all endpoints belonging to this service
+          return prevEndpoints.filter((path) => !serviceEndpoints.includes(path))
+        }
+      })
+
+      return updatedServiceNames
     })
 
     // Set as active service if it's the first one selected
@@ -401,13 +432,77 @@ export default function ServiceExplorerPage() {
 
   // Handle endpoint selection
   const handleEndpointSelect = (endpointPath: string, isSoap: boolean) => {
+    // First, update the endpoint selection
     setSelectedEndpointPaths((prev) => {
-      if (prev.includes(endpointPath)) {
-        return prev.filter((path) => path !== endpointPath)
-      } else {
-        return [...prev, endpointPath]
-      }
+      const isSelected = !prev.includes(endpointPath)
+      const updatedEndpoints = isSelected ? [...prev, endpointPath] : prev.filter((path) => path !== endpointPath)
+
+      return updatedEndpoints
     })
+
+    // Find the parent service of this endpoint
+    let parentServiceName: string | null = null
+    repositories.forEach((repo) => {
+      repo.services.forEach((service) => {
+        service.endpoints.forEach((endpoint) => {
+          if (endpoint.path === endpointPath) {
+            parentServiceName = service.serviceName
+          }
+        })
+      })
+    })
+
+    // If we found a parent service, make sure it's selected when endpoint is selected
+    if (parentServiceName) {
+      setSelectedServiceNames((prev) => {
+        const isEndpointSelected = !selectedEndpointPaths.includes(endpointPath)
+
+        if (isEndpointSelected && !prev.includes(parentServiceName!)) {
+          // Add the parent service if endpoint is being selected
+          return [...prev, parentServiceName!]
+        } else if (!isEndpointSelected) {
+          // If endpoint is being deselected, check if we should deselect the service
+
+          // Find all endpoints for this service
+          let serviceHasSelectedEndpoints = false
+          repositories.forEach((repo) => {
+            repo.services.forEach((service) => {
+              if (service.serviceName === parentServiceName) {
+                service.endpoints.forEach((endpoint) => {
+                  // Check if any other endpoint from this service is still selected
+                  // (excluding the one being deselected)
+                  if (endpoint.path !== endpointPath && selectedEndpointPaths.includes(endpoint.path)) {
+                    serviceHasSelectedEndpoints = true
+                  }
+                })
+              }
+            })
+          })
+
+          // If no endpoints remain selected for this service, deselect the service
+          if (!serviceHasSelectedEndpoints) {
+            return prev.filter((name) => name !== parentServiceName)
+          }
+        }
+
+        return prev
+      })
+    }
+
+    // Toggle endpoint expansion for SOAP endpoints
+    if (isSoap) {
+      setExpandedEndpoints((prev) => {
+        if (prev.includes(endpointPath)) {
+          return prev.filter((path) => path !== endpointPath)
+        } else {
+          return [...prev, endpointPath]
+        }
+      })
+
+      // Fetch operations when a SOAP endpoint is selected
+      fetchOperationsForEndpoint(endpointPath, isSoap)
+    }
+  }
 
     // Toggle endpoint expansion for SOAP endpoints
     if (isSoap) {
