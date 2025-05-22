@@ -430,63 +430,45 @@ export default function ServiceExplorerPage() {
     }
   }
 
-  // Handle endpoint selection
-  const handleEndpointSelect = (endpointPath: string, isSoap: boolean) => {
-    // First, update the endpoint selection
-    setSelectedEndpointPaths((prev) => {
-      const isSelected = !prev.includes(endpointPath)
-      const updatedEndpoints = isSelected ? [...prev, endpointPath] : prev.filter((path) => path !== endpointPath)
+  / // Handle endpoint selection
+  const handleEndpointSelect = (endpointPath: string, serviceName: string, isSoap: boolean) => {
+    // Check if the endpoint is currently selected
+    const isCurrentlySelected = selectedEndpointPaths.includes(endpointPath)
 
-      return updatedEndpoints
-    })
+    if (isCurrentlySelected) {
+      // DESELECTING: Remove this endpoint from selection
+      setSelectedEndpointPaths((prev) => prev.filter((path) => path !== endpointPath))
 
-    // Find the parent service of this endpoint
-    let parentServiceName: string | null = null
-    repositories.forEach((repo) => {
-      repo.services.forEach((service) => {
-        service.endpoints.forEach((endpoint) => {
-          if (endpoint.path === endpointPath) {
-            parentServiceName = service.serviceName
+      // Find all endpoints for this service
+      const serviceEndpoints: string[] = []
+      repositories.forEach((repo) => {
+        repo.services.forEach((service) => {
+          if (service.serviceName === serviceName) {
+            service.endpoints.forEach((endpoint) => {
+              if (endpoint.path !== endpointPath) {
+                // Exclude the current endpoint
+                serviceEndpoints.push(endpoint.path)
+              }
+            })
           }
         })
       })
-    })
 
-    // If we found a parent service, make sure it's selected when endpoint is selected
-    if (parentServiceName) {
-      setSelectedServiceNames((prev) => {
-        const isEndpointSelected = !selectedEndpointPaths.includes(endpointPath)
+      // Check if any other endpoints from this service are still selected
+      const hasOtherSelectedEndpoints = serviceEndpoints.some((path) => selectedEndpointPaths.includes(path))
 
-        if (isEndpointSelected && !prev.includes(parentServiceName!)) {
-          // Add the parent service if endpoint is being selected
-          return [...prev, parentServiceName!]
-        } else if (!isEndpointSelected) {
-          // If endpoint is being deselected, check if we should deselect the service
+      // If no other endpoints remain selected, deselect the service
+      if (!hasOtherSelectedEndpoints) {
+        setSelectedServiceNames((prev) => prev.filter((name) => name !== serviceName))
+      }
+    } else {
+      // SELECTING: Add this endpoint to selection
+      setSelectedEndpointPaths((prev) => [...prev, endpointPath])
 
-          // Find all endpoints for this service
-          let serviceHasSelectedEndpoints = false
-          repositories.forEach((repo) => {
-            repo.services.forEach((service) => {
-              if (service.serviceName === parentServiceName) {
-                service.endpoints.forEach((endpoint) => {
-                  // Check if any other endpoint from this service is still selected
-                  // (excluding the one being deselected)
-                  if (endpoint.path !== endpointPath && selectedEndpointPaths.includes(endpoint.path)) {
-                    serviceHasSelectedEndpoints = true
-                  }
-                })
-              }
-            })
-          })
-
-          // If no endpoints remain selected for this service, deselect the service
-          if (!serviceHasSelectedEndpoints) {
-            return prev.filter((name) => name !== parentServiceName)
-          }
-        }
-
-        return prev
-      })
+      // Make sure the parent service is selected
+      if (!selectedServiceNames.includes(serviceName)) {
+        setSelectedServiceNames((prev) => [...prev, serviceName])
+      }
     }
 
     // Toggle endpoint expansion for SOAP endpoints
@@ -503,7 +485,6 @@ export default function ServiceExplorerPage() {
       fetchOperationsForEndpoint(endpointPath, isSoap)
     }
   }
-
   // Handle SOAP operation selection
   const handleSoapOperationSelect = (operation: string) => {
     setSelectedSoapOperations((prev) => {
