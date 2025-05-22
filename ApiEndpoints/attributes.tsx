@@ -383,7 +383,7 @@ export default function ServiceExplorerPage() {
     })
   }
 
- // Handle service selection
+   // Handle service selection
   const handleServiceSelect = (serviceName: string) => {
     setSelectedServiceNames((prev) => {
       // Check if service is being selected or deselected
@@ -504,16 +504,15 @@ export default function ServiceExplorerPage() {
     }
   }
 
-    // Toggle endpoint expansion for SOAP endpoints
-    if (isSoap) {
-      setExpandedEndpoints((prev) => {
-        if (prev.includes(endpointPath)) {
-          return prev.filter((path) => path !== endpointPath)
-        } else {
-          return [...prev, endpointPath]
-        }
-      })
-    }
+  // Handle SOAP operation selection
+  const handleSoapOperationSelect = (operation: string) => {
+    setSelectedSoapOperations((prev) => {
+      if (prev.includes(operation)) {
+        return prev.filter((op) => op !== operation)
+      } else {
+        return [...prev, operation]
+      }
+    })
   }
 
   // Handle SOAP operation selection
