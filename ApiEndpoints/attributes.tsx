@@ -2,32 +2,8 @@
 
 import type React from "react"
 
-import { useState, useMemo, useEffect } from "react"
-
-// Add this import for the info icon
-import { Info } from "lucide-react"
-
-// Define the types based on the updated data format
-interface Operation {
-  name: string
-}
-
-// Update the Endpoint interface to better handle SOAP operations
-interface Endpoint {
-  path: string
-  method: "get" | "post" | "put" | "delete" | "soap"
-  operations?: string[] // Optional since REST endpoints don't have operations
-}
-
-interface Service {
-  serviceName: string
-  endpoints: Endpoint[]
-}
-
-interface Repository {
-  id: string
-  services: Service[]
-}
+import { useState, useMemo, useEffect, useRef } from "react"
+import { Info, Loader2, Plus, Edit, Check, X, MessageSquare } from "lucide-react"
 
 // Helper function to truncate text
 const truncateText = (text: string, maxLength = 25) => {
@@ -72,274 +48,513 @@ const TruncatedText = ({
   )
 }
 
-// Sample data based on the new format
-const sampleData: Repository[] = [
-  {
-    id: "customer-api",
-    services: [
-      {
-        serviceName: "CustomerManagement",
-        endpoints: [
-          {
-            path: "/api/v1/customers",
-            method: "get",
-            operations: ["customerId", "customerName", "customerEmail", "customerPhone"],
-          },
-          {
-            path: "/api/v1/customers/create",
-            method: "post",
-            operations: ["firstName", "lastName", "email", "phoneNumber", "address"],
-          },
-          {
-            path: "/api/v1/customers/{customerId}",
-            method: "put",
-            operations: ["customerId", "firstName", "lastName", "email"],
-          },
-        ],
-      },
-      {
-        serviceName: "CustomerManagement 2.0",
-        endpoints: [
-          {
-            path: "/api/v2/customers",
-            method: "get",
-            operations: ["customerId", "fullName", "email", "phoneNumber", "addressLine1", "addressLine2"],
-          },
-          {
-            path: "/api/v2/customers/{customerId}",
-            method: "get",
-            operations: ["customerId", "fullName", "email", "phoneNumber", "dateOfBirth", "customerSegment"],
-          },
-        ],
-      },
-      {
-        serviceName: "CustomerPreferences",
-        endpoints: [
-          {
-            path: "/api/v1/customers/{customerId}/preferences",
-            method: "get",
-            operations: ["customerId", "communicationPreferences", "marketingConsent"],
-          },
-          {
-            path: "/api/v1/customers/{customerId}/preferences",
-            method: "put",
-            operations: ["customerId", "communicationPreferences", "marketingConsent"],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "product-api",
-    services: [
-      {
-        serviceName: "ProductCatalog",
-        endpoints: [
-          {
-            path: "/api/v1/products",
-            method: "get",
-            operations: ["productId", "productName", "price", "category", "inStock"],
-          },
-          {
-            path: "/api/v1/products/{productId}",
-            method: "get",
-            operations: ["productId", "productName", "description", "price", "category", "specifications"],
-          },
-          {
-            path: "/api/v1/products",
-            method: "post",
-            operations: ["productName", "description", "price", "category", "specifications"],
-          },
-        ],
-      },
-      {
-        serviceName: "InventoryManagement",
-        endpoints: [
-          {
-            path: "/api/v1/inventory",
-            method: "get",
-            operations: ["productId", "warehouseId", "quantity", "lastUpdated"],
-          },
-          {
-            path: "/api/v1/inventory/{productId}",
-            method: "put",
-            operations: ["productId", "warehouseId", "quantity", "reason"],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "order-api-with-very-long-name-that-needs-truncation",
-    services: [
-      {
-        serviceName: "OrderManagement",
-        endpoints: [
-          {
-            path: "/api/v1/orders",
-            method: "get",
-            operations: ["orderId", "customerId", "orderDate", "totalAmount", "status"],
-          },
-          {
-            path: "/api/v1/orders/{orderId}",
-            method: "get",
-            operations: [
-              "orderId",
-              "customerId",
-              "orderDate",
-              "items",
-              "shippingAddress",
-              "billingAddress",
-              "paymentMethod",
-              "subtotal",
-              "tax",
-              "shippingCost",
-              "totalAmount",
-              "status",
-            ],
-          },
-        ],
-      },
-      // Update the sample data to better represent SOAP structure
-      {
-        serviceName: "SOAP Order Service",
-        endpoints: [
-          {
-            path: "http://example.com/soap/OrderService",
-            method: "soap",
-            operations: ["CreateOrder", "GetOrderStatus", "UpdateOrderDetails", "CancelOrder", "GetOrderHistory"],
-          },
-          {
-            path: "http://example.com/soap/OrderPaymentService",
-            method: "soap",
-            operations: ["ProcessPayment", "RefundPayment", "GetPaymentStatus"],
-          },
-        ],
-      },
-      {
-        serviceName: "Shipping",
-        endpoints: [
-          {
-            path: "/api/v1/shipping/methods",
-            method: "get",
-            operations: ["shippingMethodId", "name", "description", "cost", "estimatedDeliveryDays"],
-          },
-          {
-            path: "/api/v1/shipping/track/{trackingNumber}",
-            method: "get",
-            operations: ["trackingNumber", "carrier", "status", "estimatedDeliveryDate", "trackingEvents"],
-          },
-          {
-            path: "/api/v1/shipping/shipments",
-            method: "post",
-            operations: [
-              "orderId",
-              "shippingMethodId",
-              "items",
-              "shippingAddress",
-              "packageDimensions",
-              "packageWeight",
-            ],
-          },
-        ],
-      },
-    ],
-  },
-]
+// Component for React Select with pills for Client IDs
+const ClientIdSelect = ({
+  selectedIds,
+  allIds,
+  onSelect,
+  onRemove,
+}: {
+  selectedIds: string[]
+  allIds: string[]
+  onSelect: (id: string) => void
+  onRemove: (id: string) => void
+}) => {
+  const [inputValue, setInputValue] = useState("")
+  const [isOpen, setIsOpen] = useState(false)
+  const [filteredIds, setFilteredIds] = useState<string[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const pillsContainerRef = useRef<HTMLDivElement>(null)
 
-export default function ServiceExplorerPage() {
-  // State for selected repositories, services, endpoints, and active service
-  const [selectedRepositoryIds, setSelectedRepositoryIds] = useState<string[]>([])
-  const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([])
-  const [selectedEndpointPaths, setSelectedEndpointPaths] = useState<string[]>([])
-  const [selectedSoapOperations, setSelectedSoapOperations] = useState<string[]>([])
-  const [activeServiceName, setActiveServiceName] = useState<string | null>(null)
+  // Filter available IDs based on input and already selected IDs
+  useEffect(() => {
+    const filtered = allIds
+      .filter((id) => !selectedIds.includes(id))
+      .filter((id) => id.toLowerCase().includes(inputValue.toLowerCase()))
+    setFilteredIds(filtered)
+  }, [inputValue, allIds, selectedIds])
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+    if (!isOpen) setIsOpen(true)
+  }
+
+  const handleSelectId = (id: string) => {
+    onSelect(id)
+    setInputValue("")
+    setIsOpen(false)
+    inputRef.current?.focus()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && inputValue.trim() && !allIds.includes(inputValue.trim())) {
+      // Add new custom ID
+      onSelect(inputValue.trim())
+      setInputValue("")
+      e.preventDefault()
+    } else if (e.key === "Escape") {
+      setIsOpen(false)
+    }
+  }
+
+  return (
+    <div style={{ position: "relative", width: "100%" }}>
+      <div
+        ref={pillsContainerRef}
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          padding: "8px",
+          border: "1px solid #E5E7EB",
+          borderRadius: "6px",
+          backgroundColor: "white",
+          minHeight: "40px",
+          maxHeight: "150px",
+          overflowY: "auto",
+          alignItems: "center",
+        }}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {selectedIds.map((id) => (
+          <div
+            key={id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              backgroundColor: "#EFF6FF",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              fontSize: "13px",
+              gap: "6px",
+              border: "1px solid #DBEAFE",
+            }}
+          >
+            <span
+              style={{
+                maxWidth: "200px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {id}
+            </span>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "0",
+                color: "#2563EB",
+                fontSize: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove(id)
+              }}
+              aria-label="Remove client ID"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          placeholder={selectedIds.length === 0 ? "Search or add client IDs..." : ""}
+          style={{
+            flex: "1",
+            border: "none",
+            outline: "none",
+            fontSize: "14px",
+            minWidth: "120px",
+            padding: "4px",
+            backgroundColor: "transparent",
+          }}
+        />
+      </div>
+
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            maxHeight: "200px",
+            overflowY: "auto",
+            backgroundColor: "white",
+            border: "1px solid #E5E7EB",
+            borderRadius: "6px",
+            marginTop: "4px",
+            zIndex: 10,
+            boxShadow: "0 2px 10px rgba(0, 0, 0, 0.1)",
+          }}
+        >
+          {filteredIds.length > 0 ? (
+            filteredIds.map((id) => (
+              <div
+                key={id}
+                style={{
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  borderBottom: "1px solid #F3F4F6",
+                  fontSize: "14px",
+                  color: "#4B5563",
+                  transition: "background-color 0.2s",
+                }}
+                onClick={() => handleSelectId(id)}
+                onMouseDown={(e) => e.preventDefault()} // Prevent blur
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#F9FAFB"
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "white"
+                }}
+              >
+                {id}
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                padding: "8px 12px",
+                color: "#6B7280",
+                fontSize: "14px",
+                textAlign: "center",
+              }}
+            >
+              {inputValue.trim() ? `Press Enter to add "${inputValue}" as a new ID` : "No client IDs available"}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Inline Editable Field Component
+const InlineEditableField = ({
+  value,
+  onChange,
+  placeholder,
+  label,
+  icon,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  label: string
+  icon: React.ReactNode
+}) => {
+  const [isEditing, setIsEditing] = useState(false)
+  const [tempValue, setTempValue] = useState(value)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [isEditing])
+
+  const handleSave = () => {
+    onChange(tempValue)
+    setIsEditing(false)
+  }
+
+  const handleCancel = () => {
+    setTempValue(value)
+    setIsEditing(false)
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid #E5E7EB",
+        borderRadius: "6px",
+        overflow: "hidden",
+        marginBottom: "16px",
+        backgroundColor: "white",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "12px 16px",
+          backgroundColor: "#F9FAFB",
+          borderBottom: isEditing ? "1px solid #E5E7EB" : "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {icon}
+          <h3 style={{ fontSize: "16px", fontWeight: "500", color: "#111827", margin: 0 }}>{label}</h3>
+        </div>
+        {!isEditing ? (
+          <button
+            onClick={() => setIsEditing(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "none",
+              border: "none",
+              color: "#2563EB",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            <Edit size={16} />
+            Edit
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={handleCancel}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "none",
+                border: "none",
+                color: "#EF4444",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              <X size={16} />
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "none",
+                border: "none",
+                color: "#10B981",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              <Check size={16} />
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+      {!isEditing ? (
+        value ? (
+          <div style={{ padding: "12px 16px", fontSize: "14px", color: "#4B5563" }}>{value}</div>
+        ) : (
+          <div style={{ padding: "12px 16px", fontSize: "14px", color: "#9CA3AF", fontStyle: "italic" }}>
+            {placeholder}
+          </div>
+        )
+      ) : (
+        <div style={{ padding: "12px 16px" }}>
+          <textarea
+            ref={textareaRef}
+            value={tempValue}
+            onChange={(e) => setTempValue(e.target.value)}
+            placeholder={placeholder}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid #E5E7EB",
+              borderRadius: "6px",
+              fontSize: "14px",
+              minHeight: "100px",
+              resize: "vertical",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+export default function ServiceExplorerPage({ services_attributes = sampleServicesAttributes }) {
+  // State for selected clients, services, endpoints, and operations
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
+  const [selectedEndpointIds, setSelectedEndpointIds] = useState<string[]>([])
+  const [selectedOperationIds, setSelectedOperationIds] = useState<string[]>([])
+  const [activeServiceId, setActiveServiceId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [expandedRepositories, setExpandedRepositories] = useState<string[]>([])
-  const [expandedServices, setExpandedServices] = useState<string[]>([])
-  const [expandedEndpoints, setExpandedEndpoints] = useState<string[]>([])
+  const [expandedClientIds, setExpandedClientIds] = useState<string[]>([])
+  const [expandedServiceIds, setExpandedServiceIds] = useState<string[]>([])
+  const [expandedEndpointIds, setExpandedEndpointIds] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [tooltipContent, setTooltipContent] = useState<{ text: string; x: number; y: number } | null>(null)
 
-    // Initialize repositories from props when component mounts
-  useEffect(() => {
-    console.log("Initializing repositories from props:", sampleData)
-    setRepositories(sampleData)
-  }, [])
+  // State for data management
+  const [clients, setClients] = useState<Client[]>([])
+  const [loadingEndpoints, setLoadingEndpoints] = useState<string[]>([])
 
-  useEffect(() => {
-    console.log("Selected repository IDs changed:", selectedRepositoryIds)
-  }, [selectedRepositoryIds])
+  // Additional state variables
+  const [description, setDescription] = useState("")
+  const [comments, setComments] = useState("")
+  const [activeTab, setActiveTab] = useState<"attributes" | "details">("attributes")
 
-  // Add a useEffect to log when repositories change
-  // Add this after the other useEffects:
+  // Initialize clients from props when component mounts
   useEffect(() => {
-    console.log("Repositories state updated:", repositories)
-  }, [repositories])
-  // Get the selected repositories
-  const selectedRepositories = useMemo(() => {
-    return sampleData.filter((repo) => selectedRepositoryIds.includes(repo.id))
-  }, [selectedRepositoryIds])
+    console.log("Initializing clients from props:", services_attributes)
+    setClients(services_attributes)
+
+    // Initialize expanded state for services (expanded by default)
+    const initialExpandedServiceIds = services_attributes.flatMap((client) =>
+      client.services.map((service) => service.apiId),
+    )
+    setExpandedServiceIds(initialExpandedServiceIds)
+
+    // Initialize selected state based on the used flag and lastModifiedBy
+    const initialSelectedClientIds: string[] = []
+    const initialSelectedServiceIds: string[] = []
+    const initialSelectedEndpointIds: string[] = []
+    const initialSelectedOperationIds: string[] = []
+
+    services_attributes.forEach((client) => {
+      // Only process clients with used=true and lastModifiedBy not null
+      if (client.used && client.lastModifiedBy !== null) {
+        initialSelectedClientIds.push(client.appId)
+
+        client.services.forEach((service) => {
+          if (service.used) {
+            let hasSelectedEndpoint = false
+
+            service.endpoints.forEach((endpoint) => {
+              if (endpoint.used) {
+                initialSelectedEndpointIds.push(endpoint.endpointId)
+                hasSelectedEndpoint = true
+
+                // Handle operations if they exist
+                if (endpoint.operations) {
+                  endpoint.operations.forEach((operation) => {
+                    if (operation.used) {
+                      initialSelectedOperationIds.push(`${endpoint.endpointId}-${operation.operation}`)
+                    }
+                  })
+                }
+              }
+            })
+
+            // Only select the service if it has at least one selected endpoint
+            if (hasSelectedEndpoint) {
+              initialSelectedServiceIds.push(service.apiId)
+            }
+          }
+        })
+      }
+    })
+
+    setSelectedClientIds(initialSelectedClientIds)
+    setSelectedServiceIds(initialSelectedServiceIds)
+    setSelectedEndpointIds(initialSelectedEndpointIds)
+    setSelectedOperationIds(initialSelectedOperationIds)
+
+    // Set all clients as expanded by default
+    setExpandedClientIds(services_attributes.map((client) => client.appId))
+  }, [services_attributes])
+
+  // Get the selected clients
+  const selectedClients = useMemo(() => {
+    return clients.filter((client) => selectedClientIds.includes(client.appId))
+  }, [clients, selectedClientIds])
 
   // Get all selected services
   const selectedServices = useMemo(() => {
-    const services: Service[] = []
-    selectedRepositories.forEach((repo) => {
-      repo.services.forEach((service) => {
-        if (selectedServiceNames.includes(service.serviceName)) {
-          services.push(service)
+    const services: { service: Service; clientId: string }[] = []
+    selectedClients.forEach((client) => {
+      client.services.forEach((service) => {
+        if (selectedServiceIds.includes(service.apiId)) {
+          services.push({ service, clientId: client.appId })
         }
       })
     })
     return services
-  }, [selectedRepositories, selectedServiceNames])
+  }, [selectedClients, selectedServiceIds])
 
   // Get the active service for the tabs
   const activeService = useMemo(() => {
-    if (!activeServiceName || selectedServices.length === 0) return selectedServices[0] || null
-    return selectedServices.find((service) => service.serviceName === activeServiceName) || selectedServices[0] || null
-  }, [activeServiceName, selectedServices])
+    if (!activeServiceId || selectedServices.length === 0) return selectedServices[0] || null
+    const found = selectedServices.find(({ service }) => service.apiId === activeServiceId)
+    return found || selectedServices[0] || null
+  }, [activeServiceId, selectedServices])
 
   // Get all selected endpoints
   const selectedEndpoints = useMemo(() => {
-    const endpoints: { endpoint: Endpoint; serviceName: string }[] = []
-    selectedRepositories.forEach((repo) => {
-      repo.services.forEach((service) => {
-        if (selectedServiceNames.includes(service.serviceName)) {
+    const endpoints: { endpoint: Endpoint; serviceId: string; clientId: string }[] = []
+    selectedClients.forEach((client) => {
+      client.services.forEach((service) => {
+        if (selectedServiceIds.includes(service.apiId)) {
           service.endpoints.forEach((endpoint) => {
-            if (selectedEndpointPaths.includes(endpoint.path)) {
-              endpoints.push({ endpoint, serviceName: service.serviceName })
+            if (selectedEndpointIds.includes(endpoint.endpointId)) {
+              endpoints.push({ endpoint, serviceId: service.apiId, clientId: client.appId })
             }
           })
         }
       })
     })
     return endpoints
-  }, [selectedRepositories, selectedServiceNames, selectedEndpointPaths])
+  }, [selectedClients, selectedServiceIds, selectedEndpointIds])
 
   // Get operations for the active service and selected endpoints
   const selectedOperations = useMemo(() => {
     if (!activeService) return []
 
-    const operations: { operation: string; endpointPath: string; method: string }[] = []
-    activeService.endpoints.forEach((endpoint) => {
-      if (selectedEndpointPaths.includes(endpoint.path) && endpoint.operations) {
-        endpoint.operations.forEach((operation) => {
+    const operations: { operation: string; endpointId: string; method: string }[] = []
+    activeService.service.endpoints.forEach((endpoint) => {
+      if (selectedEndpointIds.includes(endpoint.endpointId) && endpoint.operations) {
+        endpoint.operations.forEach((op) => {
+          const operationId = `${endpoint.endpointId}-${op.operation}`
           // For SOAP endpoints, only include selected operations
-          if (endpoint.method === "soap") {
-            if (selectedSoapOperations.includes(operation)) {
-              operations.push({ operation, endpointPath: endpoint.path, method: endpoint.method })
+          if (endpoint.method === "SOAP") {
+            if (selectedOperationIds.includes(operationId)) {
+              operations.push({ operation: op.operation, endpointId: endpoint.endpointId, method: endpoint.method })
             }
           } else {
             // For REST endpoints, include all operations
-            operations.push({ operation, endpointPath: endpoint.path, method: endpoint.method })
+            operations.push({ operation: op.operation, endpointId: endpoint.endpointId, method: endpoint.method })
           }
         })
       }
     })
     return operations
-  }, [activeService, selectedEndpointPaths, selectedSoapOperations])
+  }, [activeService, selectedEndpointIds, selectedOperationIds])
 
   // Paginate the operations
   const paginatedOperations = useMemo(() => {
@@ -349,189 +564,271 @@ export default function ServiceExplorerPage() {
 
   const totalPages = Math.ceil(selectedOperations.length / itemsPerPage)
 
-  // Filter repositories and services based on search query
-  const filteredRepositories = useMemo(() => {
-    if (!searchQuery) return sampleData
+  // Filter clients and services based on search query
+  const filteredClients = useMemo(() => {
+    if (!searchQuery) return clients
 
-    return sampleData.filter((repo) => {
-      const repoMatches = repo.id.toLowerCase().includes(searchQuery.toLowerCase())
+    return clients.filter((client) => {
+      const clientMatches =
+        client.appName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.appId.toLowerCase().includes(searchQuery.toLowerCase())
 
-      const serviceMatches = repo.services.some(
+      const serviceMatches = client.services.some(
         (service) =>
-          service.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          service.apiName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          service.version.toLowerCase().includes(searchQuery.toLowerCase()) ||
           service.endpoints.some(
             (endpoint) =>
-              endpoint.path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              endpoint.endpoint.toLowerCase().includes(searchQuery.toLowerCase()) ||
               endpoint.method.toLowerCase().includes(searchQuery.toLowerCase()) ||
               (endpoint.operations &&
-                endpoint.operations.some((operation) => operation.toLowerCase().includes(searchQuery.toLowerCase()))),
+                endpoint.operations.some((operation) =>
+                  operation.operation.toLowerCase().includes(searchQuery.toLowerCase()),
+                )),
           ),
       )
 
-      return repoMatches || serviceMatches
+      return clientMatches || serviceMatches
     })
-  }, [searchQuery])
+  }, [searchQuery, clients])
 
-  // Handle repository selection
-  const handleRepositorySelect = (repoId: string) => {
-    setSelectedRepositoryIds((prev) => {
-      if (prev.includes(repoId)) {
-        return prev.filter((id) => id !== repoId)
+  // Handle client selection
+  const handleClientSelect = (clientId: string) => {
+    setSelectedClientIds((prev) => {
+      if (prev.includes(clientId)) {
+        // Deselecting client - remove client and all its services and endpoints
+        const client = clients.find((c) => c.appId === clientId)
+        if (client) {
+          const serviceIds = client.services.map((s) => s.apiId)
+          const endpointIds = client.services.flatMap((s) => s.endpoints.map((e) => e.endpointId))
+          const operationIds = client.services.flatMap((s) =>
+            s.endpoints.flatMap((e) =>
+              e.operations ? e.operations.map((op) => `${e.endpointId}-${op.operation}`) : [],
+            ),
+          )
+
+          setSelectedServiceIds((prev) => prev.filter((id) => !serviceIds.includes(id)))
+          setSelectedEndpointIds((prev) => prev.filter((id) => !endpointIds.includes(id)))
+          setSelectedOperationIds((prev) => prev.filter((id) => !operationIds.includes(id)))
+        }
+
+        return prev.filter((id) => id !== clientId)
       } else {
-        return [...prev, repoId]
+        // Selecting client - add client but don't automatically select services/endpoints
+        return [...prev, clientId]
       }
     })
   }
 
-   // Handle service selection
-  const handleServiceSelect = (serviceName: string) => {
-    setSelectedServiceNames((prev) => {
+  // Handle service selection
+  const handleServiceSelect = (serviceId: string, clientId: string) => {
+    setSelectedServiceIds((prev) => {
       // Check if service is being selected or deselected
-      const isSelected = !prev.includes(serviceName)
+      const isSelected = !prev.includes(serviceId)
 
       // Update selected services list
-      const updatedServiceNames = isSelected ? [...prev, serviceName] : prev.filter((name) => name !== serviceName)
+      const updatedServiceIds = isSelected ? [...prev, serviceId] : prev.filter((id) => id !== serviceId)
 
       // Find all endpoints for this service
-      const serviceEndpoints: string[] = []
-      repositories.forEach((repo) => {
-        repo.services.forEach((service) => {
-          if (service.serviceName === serviceName) {
-            service.endpoints.forEach((endpoint) => {
-              serviceEndpoints.push(endpoint.path)
-            })
-          }
-        })
-      })
+      const client = clients.find((c) => c.appId === clientId)
+      if (!client) return updatedServiceIds
+
+      const service = client.services.find((s) => s.apiId === serviceId)
+      if (!service) return updatedServiceIds
+
+      const serviceEndpointIds = service.endpoints.map((e) => e.endpointId)
+      const serviceOperationIds = service.endpoints.flatMap((e) =>
+        e.operations ? e.operations.map((op) => `${e.endpointId}-${op.operation}`) : [],
+      )
 
       // Update selected endpoints based on service selection
-      setSelectedEndpointPaths((prevEndpoints) => {
+      setSelectedEndpointIds((prevEndpoints) => {
         if (isSelected) {
           // Add all service endpoints if not already selected
           const newEndpoints = [...prevEndpoints]
-          serviceEndpoints.forEach((path) => {
-            if (!newEndpoints.includes(path)) {
-              newEndpoints.push(path)
+          serviceEndpointIds.forEach((id) => {
+            if (!newEndpoints.includes(id)) {
+              newEndpoints.push(id)
             }
           })
           return newEndpoints
         } else {
           // Remove all endpoints belonging to this service
-          return prevEndpoints.filter((path) => !serviceEndpoints.includes(path))
+          return prevEndpoints.filter((id) => !serviceEndpointIds.includes(id))
         }
       })
 
-      return updatedServiceNames
+      // Update selected operations based on service selection
+      setSelectedOperationIds((prevOperations) => {
+        if (isSelected) {
+          // Add all service operations if not already selected
+          const newOperations = [...prevOperations]
+          serviceOperationIds.forEach((id) => {
+            if (!newOperations.includes(id)) {
+              newOperations.push(id)
+            }
+          })
+          return newOperations
+        } else {
+          // Remove all operations belonging to this service
+          return prevOperations.filter((id) => !serviceOperationIds.includes(id))
+        }
+      })
+
+      // Make sure the client is selected
+      if (isSelected && !selectedClientIds.includes(clientId)) {
+        setSelectedClientIds((prev) => [...prev, clientId])
+      }
+
+      return updatedServiceIds
     })
 
     // Set as active service if it's the first one selected
-    if (selectedServiceNames.length === 0) {
-      setActiveServiceName(serviceName)
+    if (selectedServiceIds.length === 0) {
+      setActiveServiceId(serviceId)
     }
   }
 
-  / // Handle endpoint selection
-  const handleEndpointSelect = (endpointPath: string, serviceName: string, isSoap: boolean) => {
+  // Handle endpoint selection
+  const handleEndpointSelect = (endpointId: string, serviceId: string, clientId: string) => {
     // Check if the endpoint is currently selected
-    const isCurrentlySelected = selectedEndpointPaths.includes(endpointPath)
+    const isCurrentlySelected = selectedEndpointIds.includes(endpointId)
 
     if (isCurrentlySelected) {
       // DESELECTING: Remove this endpoint from selection
-      setSelectedEndpointPaths((prev) => prev.filter((path) => path !== endpointPath))
+      setSelectedEndpointIds((prev) => prev.filter((id) => id !== endpointId))
+
+      // Remove any operations associated with this endpoint
+      setSelectedOperationIds((prev) => prev.filter((id) => !id.startsWith(`${endpointId}-`)))
 
       // Find all endpoints for this service
-      const serviceEndpoints: string[] = []
-      repositories.forEach((repo) => {
-        repo.services.forEach((service) => {
-          if (service.serviceName === serviceName) {
-            service.endpoints.forEach((endpoint) => {
-              if (endpoint.path !== endpointPath) {
-                // Exclude the current endpoint
-                serviceEndpoints.push(endpoint.path)
-              }
-            })
-          }
-        })
-      })
+      const client = clients.find((c) => c.appId === clientId)
+      if (!client) return
+
+      const service = client.services.find((s) => s.apiId === serviceId)
+      if (!service) return
+
+      const serviceEndpointIds = service.endpoints.map((e) => e.endpointId)
 
       // Check if any other endpoints from this service are still selected
-      const hasOtherSelectedEndpoints = serviceEndpoints.some((path) => selectedEndpointPaths.includes(path))
+      const hasOtherSelectedEndpoints = serviceEndpointIds.some(
+        (id) => id !== endpointId && selectedEndpointIds.includes(id),
+      )
 
       // If no other endpoints remain selected, deselect the service
       if (!hasOtherSelectedEndpoints) {
-        setSelectedServiceNames((prev) => prev.filter((name) => name !== serviceName))
+        setSelectedServiceIds((prev) => prev.filter((id) => id !== serviceId))
       }
     } else {
       // SELECTING: Add this endpoint to selection
-      setSelectedEndpointPaths((prev) => [...prev, endpointPath])
+      setSelectedEndpointIds((prev) => [...prev, endpointId])
+
+      // Find the endpoint to check if it has operations that should be selected
+      const client = clients.find((c) => c.appId === clientId)
+      if (!client) return
+
+      const service = client.services.find((s) => s.apiId === serviceId)
+      if (!service) return
+
+      const endpoint = service.endpoints.find((e) => e.endpointId === endpointId)
+      if (!endpoint) return
+
+      // If the endpoint has operations and they are marked as used, select them
+      if (endpoint.operations) {
+        const usedOperationIds = endpoint.operations
+          .filter((op) => op.used)
+          .map((op) => `${endpointId}-${op.operation}`)
+
+        if (usedOperationIds.length > 0) {
+          setSelectedOperationIds((prev) => [...prev, ...usedOperationIds])
+        }
+      }
 
       // Make sure the parent service is selected
-      if (!selectedServiceNames.includes(serviceName)) {
-        setSelectedServiceNames((prev) => [...prev, serviceName])
+      if (!selectedServiceIds.includes(serviceId)) {
+        setSelectedServiceIds((prev) => [...prev, serviceId])
+      }
+
+      // Make sure the client is selected
+      if (!selectedClientIds.includes(clientId)) {
+        setSelectedClientIds((prev) => [...prev, clientId])
       }
     }
 
     // Toggle endpoint expansion for SOAP endpoints
-    if (isSoap) {
-      setExpandedEndpoints((prev) => {
-        if (prev.includes(endpointPath)) {
-          return prev.filter((path) => path !== endpointPath)
-        } else {
-          return [...prev, endpointPath]
+    const client = clients.find((c) => c.appId === clientId)
+    if (client) {
+      const service = client.services.find((s) => s.apiId === serviceId)
+      if (service) {
+        const endpoint = service.endpoints.find((e) => e.endpointId === endpointId)
+        if (endpoint && endpoint.method === "SOAP") {
+          setExpandedEndpointIds((prev) => {
+            if (prev.includes(endpointId)) {
+              return prev.filter((id) => id !== endpointId)
+            } else {
+              return [...prev, endpointId]
+            }
+          })
         }
-      })
-
-      // Fetch operations when a SOAP endpoint is selected
-      fetchOperationsForEndpoint(endpointPath, isSoap)
+      }
     }
   }
-  // Handle SOAP operation selection
-  const handleSoapOperationSelect = (operation: string) => {
-    setSelectedSoapOperations((prev) => {
-      if (prev.includes(operation)) {
-        return prev.filter((op) => op !== operation)
-      } else {
-        return [...prev, operation]
-      }
-    })
-  }
 
-  // Handle SOAP operation selection
-  const handleSoapOperationSelect = (operation: string) => {
-    setSelectedSoapOperations((prev) => {
-      if (prev.includes(operation)) {
-        return prev.filter((op) => op !== operation)
+  // Handle operation selection
+  const handleOperationSelect = (operationId: string, endpointId: string, serviceId: string, clientId: string) => {
+    const fullOperationId = `${endpointId}-${operationId}`
+
+    setSelectedOperationIds((prev) => {
+      if (prev.includes(fullOperationId)) {
+        return prev.filter((id) => id !== fullOperationId)
       } else {
-        return [...prev, operation]
+        return [...prev, fullOperationId]
       }
     })
+
+    // Make sure the endpoint is selected
+    if (!selectedEndpointIds.includes(endpointId)) {
+      setSelectedEndpointIds((prev) => [...prev, endpointId])
+    }
+
+    // Make sure the service is selected
+    if (!selectedServiceIds.includes(serviceId)) {
+      setSelectedServiceIds((prev) => [...prev, serviceId])
+    }
+
+    // Make sure the client is selected
+    if (!selectedClientIds.includes(clientId)) {
+      setSelectedClientIds((prev) => [...prev, clientId])
+    }
   }
 
   // Toggle endpoint expansion
-  const toggleEndpoint = (endpointPath: string) => {
-    setExpandedEndpoints((prev) => {
-      if (prev.includes(endpointPath)) {
-        return prev.filter((path) => path !== endpointPath)
+  const toggleEndpoint = (endpointId: string) => {
+    setExpandedEndpointIds((prev) => {
+      if (prev.includes(endpointId)) {
+        return prev.filter((id) => id !== endpointId)
       } else {
-        return [...prev, endpointPath]
+        return [...prev, endpointId]
       }
     })
   }
 
   // Handle service tab change
-  const handleServiceTabChange = (serviceName: string) => {
-    setActiveServiceName(serviceName)
+  const handleServiceTabChange = (serviceId: string) => {
+    setActiveServiceId(serviceId)
   }
 
-  // Toggle repository expansion
-  const toggleRepository = (repoId: string) => {
-    setExpandedRepositories((prev) => (prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]))
+  // Toggle client expansion
+  const toggleClient = (clientId: string) => {
+    setExpandedClientIds((prev) =>
+      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId],
+    )
   }
 
   // Toggle service expansion
-  const toggleService = (serviceName: string) => {
-    setExpandedServices((prev) =>
-      prev.includes(serviceName) ? prev.filter((name) => name !== serviceName) : [...prev, serviceName],
+  const toggleService = (serviceId: string) => {
+    setExpandedServiceIds((prev) =>
+      prev.includes(serviceId) ? prev.filter((id) => id !== serviceId) : [...prev, serviceId],
     )
   }
 
@@ -541,11 +838,12 @@ export default function ServiceExplorerPage() {
   }
 
   // Clear selected endpoints and services
-  const clearSelectedEndpoints = () => {
-    setSelectedEndpointPaths([])
-    setSelectedServiceNames([])
-    setSelectedSoapOperations([])
-    setActiveServiceName(null)
+  const clearSelectedItems = () => {
+    setSelectedEndpointIds([])
+    setSelectedServiceIds([])
+    setSelectedOperationIds([])
+    setSelectedClientIds([])
+    setActiveServiceId(null)
   }
 
   // Show tooltip
@@ -564,28 +862,28 @@ export default function ServiceExplorerPage() {
 
   // Get method badge color
   const getMethodBadgeStyle = (method: string) => {
-    switch (method.toLowerCase()) {
-      case "get":
+    switch (method.toUpperCase()) {
+      case "GET":
         return {
           backgroundColor: "#DBEAFE",
           color: "#1E40AF",
         }
-      case "post":
+      case "POST":
         return {
           backgroundColor: "#DEF7EC",
           color: "#046C4E",
         }
-      case "put":
+      case "PUT":
         return {
           backgroundColor: "#FEF3C7",
           color: "#92400E",
         }
-      case "delete":
+      case "DELETE":
         return {
           backgroundColor: "#FEE2E2",
           color: "#B91C1C",
         }
-      case "soap":
+      case "SOAP":
         return {
           backgroundColor: "#E0E7FF",
           color: "#4338CA",
@@ -598,341 +896,12 @@ export default function ServiceExplorerPage() {
     }
   }
 
-  // Styles - Updated to blue color scheme and English text
-  const styles = {
-    container: {
-      margin: "0 auto",
-      padding: "16px",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
-      position: "relative" as const,
-    },
-    gridContainer: {
-      display: "grid",
-      gridTemplateColumns: "1fr 2fr",
-      gap: "24px",
-    },
-    sidebarHeader: {
-      fontSize: "18px",
-      fontWeight: "600",
-      marginBottom: "8px",
-      display: "flex",
-      alignItems: "center",
-      color: "#111827",
-    },
-    badge: {
-      backgroundColor: "rgba(37, 99, 235, 0.1)",
-      color: "#2563EB",
-      padding: "2px 8px",
-      borderRadius: "4px",
-      fontSize: "14px",
-      marginLeft: "8px",
-      fontWeight: "500",
-    },
-    searchContainer: {
-      position: "relative",
-      marginBottom: "16px",
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-    },
-    searchInput: {
-      flex: "1",
-      padding: "10px 12px",
-      paddingLeft: "36px",
-      border: "1px solid #E5E7EB",
-      borderRadius: "6px",
-      fontSize: "14px",
-    },
-    searchIcon: {
-      position: "absolute",
-      left: "12px",
-      top: "50%",
-      transform: "translateY(-50%)",
-      color: "#9CA3AF",
-      fontSize: "16px",
-    },
-    clearButton: {
-      position: "absolute",
-      right: "12px",
-      top: "50%",
-      transform: "translateY(-50%)",
-      color: "#9CA3AF",
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      fontSize: "14px",
-    },
-    clearSelectionButton: {
-      display: "flex",
-      alignItems: "center",
-      gap: "4px",
-      color: "#2563EB",
-      background: "none",
-      border: "1px solid #E5E7EB",
-      borderRadius: "6px",
-      cursor: "pointer",
-      fontSize: "14px",
-      padding: "8px 12px",
-      whiteSpace: "nowrap" as const,
-    },
-    repoList: {
-      border: "1px solid #E5E7EB",
-      borderRadius: "6px",
-      overflow: "hidden",
-      maxHeight: "600px",
-      overflowY: "auto",
-      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-    },
-    repoSelector: {
-      padding: "12px",
-      backgroundColor: "#F9FAFB",
-      borderBottom: "1px solid #E5E7EB",
-      display: "flex",
-      flexWrap: "wrap",
-      gap: "8px",
-    },
-    repoButton: {
-      padding: "6px 12px",
-      borderRadius: "4px",
-      fontSize: "14px",
-      cursor: "pointer",
-      border: "1px solid #E5E7EB",
-      backgroundColor: "white",
-      transition: "all 0.2s",
-    },
-    repoButtonSelected: {
-      backgroundColor: "#2563EB",
-      color: "white",
-      border: "1px solid #2563EB",
-    },
-    repoItem: {
-      borderBottom: "1px solid #E5E7EB",
-    },
-    repoHeader: {
-      display: "flex",
-      alignItems: "center",
-      padding: "12px",
-      cursor: "pointer",
-      backgroundColor: "#F3F4F6",
-      fontWeight: "500",
-    },
-    repoName: {
-      fontWeight: "600",
-      flex: 1,
-      fontSize: "14px",
-      cursor: "pointer",
-    },
-    expandButton: {
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      padding: "4px",
-      color: "#6B7280",
-      fontSize: "12px",
-    },
-    serviceItem: {
-      borderBottom: "1px solid #E5E7EB",
-    },
-    serviceHeader: {
-      display: "flex",
-      alignItems: "center",
-      padding: "10px 12px",
-      paddingLeft: "24px",
-      cursor: "pointer",
-      transition: "background-color 0.2s",
-    },
-    checkbox: {
-      marginRight: "8px",
-      cursor: "pointer",
-    },
-    serviceName: {
-      flex: 1,
-      fontSize: "14px",
-      display: "flex",
-      alignItems: "center",
-    },
-    serviceVersion: {
-      fontSize: "12px",
-      color: "#6B7280",
-      marginLeft: "6px",
-    },
-    endpointList: {
-      backgroundColor: "#F9FAFB",
-    },
-    endpointItem: {
-      display: "flex",
-      alignItems: "center",
-      padding: "10px 12px",
-      paddingLeft: "48px",
-      borderTop: "1px solid #E5E7EB",
-      cursor: "pointer",
-      transition: "background-color 0.2s",
-    },
-    operationItem: {
-      display: "flex",
-      alignItems: "center",
-      padding: "10px 12px",
-      paddingLeft: "72px",
-      borderTop: "1px solid #E5E7EB",
-      cursor: "pointer",
-      transition: "background-color 0.2s",
-      backgroundColor: "#F3F4F6",
-    },
-    hoverItem: {
-      backgroundColor: "white",
-      transition: "background-color 0.2s",
-    },
-    endpointPath: {
-      flex: 1,
-      fontSize: "14px",
-      cursor: "pointer",
-    },
-    operationName: {
-      flex: 1,
-      fontSize: "14px",
-    },
-    methodBadge: {
-      padding: "2px 8px",
-      borderRadius: "4px",
-      fontSize: "12px",
-      fontWeight: "500",
-      textTransform: "uppercase" as const,
-    },
-    mainContent: {
-      display: "flex",
-      flexDirection: "column" as const,
-    },
-    contentHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: "16px",
-    },
-    contentTitle: {
-      fontSize: "18px",
-      fontWeight: "600",
-      color: "#111827",
-    },
-    tabsContainer: {
-      display: "flex",
-      borderBottom: "1px solid #E5E7EB",
-      marginBottom: "16px",
-      overflowX: "auto",
-    },
-    tab: {
-      padding: "8px 16px",
-      borderBottom: "2px solid transparent",
-      cursor: "pointer",
-      whiteSpace: "nowrap" as const,
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-      fontSize: "14px",
-      fontWeight: "500",
-      color: "#6B7280",
-      transition: "all 0.2s",
-    },
-    activeTab: {
-      borderBottom: "2px solid #2563EB",
-      color: "#2563EB",
-    },
-    tabIcon: {
-      fontSize: "16px",
-      color: "inherit",
-    },
-    addButton: {
-      padding: "8px 16px",
-      backgroundColor: "#2563EB",
-      color: "white",
-      border: "none",
-      borderRadius: "4px",
-      cursor: "pointer",
-      marginBottom: "16px",
-      fontSize: "14px",
-      fontWeight: "500",
-      transition: "background-color 0.2s",
-    },
-    emptyState: {
-      border: "1px solid #E5E7EB",
-      borderRadius: "6px",
-      padding: "32px",
-      textAlign: "center" as const,
-      backgroundColor: "#F9FAFB",
-      color: "#6B7280",
-      fontSize: "14px",
-    },
-    tableContainer: {
-      border: "1px solid #E5E7EB",
-      borderRadius: "6px",
-      overflow: "hidden",
-      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-    },
-    pagination: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: "12px 16px",
-      borderTop: "1px solid #E5E7EB",
-      backgroundColor: "#F9FAFB",
-    },
-    paginationInfo: {
-      fontSize: "14px",
-      color: "#6B7280",
-    },
-    paginationControls: {
-      display: "flex",
-      alignItems: "center",
-      gap: "4px",
-    },
-    paginationButton: {
-      padding: "6px 10px",
-      borderRadius: "4px",
-      border: "1px solid #E5E7EB",
-      cursor: "pointer",
-      backgroundColor: "white",
-      color: "#4B5563",
-      fontSize: "14px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    paginationButtonDisabled: {
-      color: "#D1D5DB",
-      cursor: "not-allowed",
-      borderColor: "#F3F4F6",
-    },
-    pageButton: {
-      width: "32px",
-      height: "32px",
-      borderRadius: "4px",
-      border: "1px solid #E5E7EB",
-      cursor: "pointer",
-      backgroundColor: "white",
-      color: "#4B5563",
-      fontSize: "14px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    activePageButton: {
-      backgroundColor: "#2563EB",
-      color: "white",
-      borderColor: "#2563EB",
-    },
-    tooltip: {
-      position: "fixed" as const,
-      zIndex: 1000,
-      backgroundColor: "#333",
-      color: "white",
-      padding: "8px 12px",
-      borderRadius: "4px",
-      fontSize: "12px",
-      maxWidth: "300px",
-      wordBreak: "break-all" as const,
-      boxShadow: "0 2px 10px rgba(0, 0, 0, 0.2)",
-    },
-  }
+  // Get all client IDs for the select component
+  const allClientIds = useMemo(() => {
+    return clients.map((client) => client.appId)
+  }, [clients])
 
+ 
   return (
     <div style={styles.container}>
       {/* Tooltip */}
@@ -949,7 +918,7 @@ export default function ServiceExplorerPage() {
       )}
 
       <div style={styles.gridContainer}>
-        {/* Sidebar */}
+        {/* Search and Client Section */}
         <div>
           <div style={styles.sidebarHeader}>{/* Header space maintained but content removed */}</div>
 
@@ -958,7 +927,7 @@ export default function ServiceExplorerPage() {
             <div style={{ position: "relative", flex: 1 }}>
               <input
                 type="text"
-                placeholder="Search repositories, services or endpoints..."
+                placeholder="Search clients, services or endpoints..."
                 style={styles.searchInput}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -974,81 +943,93 @@ export default function ServiceExplorerPage() {
               style={{
                 ...styles.clearSelectionButton,
                 opacity:
-                  selectedEndpointPaths.length > 0 ||
-                  selectedServiceNames.length > 0 ||
-                  selectedSoapOperations.length > 0
+                  selectedEndpointIds.length > 0 ||
+                  selectedServiceIds.length > 0 ||
+                  selectedOperationIds.length > 0 ||
+                  selectedClientIds.length > 0
                     ? 1
                     : 0.5,
                 cursor:
-                  selectedEndpointPaths.length > 0 ||
-                  selectedServiceNames.length > 0 ||
-                  selectedSoapOperations.length > 0
+                  selectedEndpointIds.length > 0 ||
+                  selectedServiceIds.length > 0 ||
+                  selectedOperationIds.length > 0 ||
+                  selectedClientIds.length > 0
                     ? "pointer"
                     : "default",
               }}
-              onClick={clearSelectedEndpoints}
+              onClick={clearSelectedItems}
             >
               ✕ Clear selection
             </button>
+            <button style={styles.addIdButton}>
+              <Plus size={14} /> Add ID
+            </button>
           </div>
 
-          {/* Repository List */}
-          <div style={styles.repoList}>
-            {/* Repository Selector */}
-            <div style={styles.repoSelector}>
-              {sampleData.map((repo) => (
-                <button
-                  key={repo.id}
-                  onClick={() => handleRepositorySelect(repo.id)}
-                  style={{
-                    ...styles.repoButton,
-                    ...(selectedRepositoryIds.includes(repo.id) ? styles.repoButtonSelected : {}),
-                  }}
-                >
-                  <TruncatedText
-                    text={repo.id.toUpperCase()}
-                    maxLength={15}
-                    onShowTooltip={showTooltip}
-                    onHideTooltip={hideTooltip}
-                  />
-                </button>
-              ))}
+          {/* Client List */}
+          <div style={styles.clientList}>
+            {/* Client ID Selector */}
+            <div style={{ marginBottom: "16px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <h3 style={{ fontSize: "16px", fontWeight: "600", color: "#111827" }}>Client ID(s)</h3>
+              </div>
+              <ClientIdSelect
+                selectedIds={selectedClientIds}
+                allIds={allClientIds}
+                onSelect={handleClientSelect}
+                onRemove={handleClientSelect}
+              />
             </div>
 
-            {/* Selected Repositories */}
-            {filteredRepositories
-              .filter((repo) => selectedRepositoryIds.includes(repo.id))
-              .map((repo) => (
-                <div key={repo.id} style={styles.repoItem}>
-                  {/* Repository Header */}
-                  <div style={styles.repoHeader} onClick={() => toggleRepository(repo.id)}>
-                    <span style={styles.repoName}>
+            {/* Selected Clients */}
+            {filteredClients
+              .filter((client) => selectedClientIds.includes(client.appId))
+              .map((client) => (
+                <div key={client.appId} style={styles.clientItem}>
+                  {/* Client Header */}
+                  <div style={styles.clientHeader} onClick={() => toggleClient(client.appId)}>
+                    <span style={styles.clientName}>
                       <TruncatedText
-                        text={repo.id.toUpperCase()}
+                        text={client.appName}
                         maxLength={20}
                         onShowTooltip={showTooltip}
                         onHideTooltip={hideTooltip}
                       />
                     </span>
-                    <button style={styles.expandButton}>{expandedRepositories.includes(repo.id) ? "▼" : "▶"}</button>
+                    <span
+                      style={{
+                        ...styles.lastModifiedBadge,
+                        ...(client.lastModifiedBy ? styles.lastModifiedActive : styles.lastModifiedInactive),
+                      }}
+                    >
+                      {client.lastModifiedBy ? "Active" : "Inactive"}
+                    </span>
+                    <button style={styles.expandButton}>{expandedClientIds.includes(client.appId) ? "▼" : "▶"}</button>
                   </div>
 
                   {/* Services */}
-                  {expandedRepositories.includes(repo.id) && (
+                  {expandedClientIds.includes(client.appId) && (
                     <div>
-                      {repo.services.map((service) => {
-                        const isExpanded = expandedServices.includes(service.serviceName)
-                        const isSelected = selectedServiceNames.includes(service.serviceName)
+                      {client.services.map((service) => {
+                        const isExpanded = expandedServiceIds.includes(service.apiId)
+                        const isSelected = selectedServiceIds.includes(service.apiId)
 
                         return (
-                          <div key={service.serviceName} style={styles.serviceItem}>
+                          <div key={service.apiId} style={styles.serviceItem}>
                             {/* Service Header */}
                             <div
                               style={{
                                 ...styles.serviceHeader,
                                 backgroundColor: isSelected ? "rgba(37, 99, 235, 0.05)" : "transparent",
                               }}
-                              onClick={() => toggleService(service.serviceName)}
+                              onClick={() => toggleService(service.apiId)}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.backgroundColor = "white"
                               }}
@@ -1064,16 +1045,17 @@ export default function ServiceExplorerPage() {
                                 checked={isSelected}
                                 onChange={(e) => {
                                   e.stopPropagation()
-                                  handleServiceSelect(service.serviceName)
+                                  handleServiceSelect(service.apiId, client.appId)
                                 }}
                               />
                               <div style={styles.serviceName}>
                                 <TruncatedText
-                                  text={service.serviceName}
+                                  text={service.apiName}
                                   maxLength={25}
                                   onShowTooltip={showTooltip}
                                   onHideTooltip={hideTooltip}
                                 />
+                                <span style={styles.serviceVersion}>v{service.version}</span>
                               </div>
                               <button style={styles.expandButton}>{isExpanded ? "▼" : "▶"}</button>
                             </div>
@@ -1081,13 +1063,14 @@ export default function ServiceExplorerPage() {
                             {/* Endpoints */}
                             {isExpanded && (
                               <div style={styles.endpointList}>
-                                {service.endpoints.map((endpoint, index) => {
-                                  const isEndpointSelected = selectedEndpointPaths.includes(endpoint.path)
-                                  const isEndpointExpanded = expandedEndpoints.includes(endpoint.path)
-                                  const isSoap = endpoint.method === "soap"
+                                {service.endpoints.map((endpoint) => {
+                                  const isEndpointSelected = selectedEndpointIds.includes(endpoint.endpointId)
+                                  const isEndpointExpanded = expandedEndpointIds.includes(endpoint.endpointId)
+                                  const isSoap = endpoint.method.toUpperCase() === "SOAP"
+                                  const isLoading = loadingEndpoints.includes(endpoint.endpointId)
 
                                   return (
-                                    <div key={`${endpoint.path}-${index}`}>
+                                    <div key={endpoint.endpointId}>
                                       {/* Endpoint Item */}
                                       <div
                                         style={{
@@ -1109,12 +1092,13 @@ export default function ServiceExplorerPage() {
                                           type="checkbox"
                                           style={styles.checkbox}
                                           checked={isEndpointSelected}
-                                          onChange={() => handleEndpointSelect(endpoint.path, isSoap)}
-                                          disabled={!isSelected}
+                                          onChange={() =>
+                                            handleEndpointSelect(endpoint.endpointId, service.apiId, client.appId)
+                                          }
                                         />
                                         <span style={styles.endpointPath}>
                                           <TruncatedText
-                                            text={endpoint.path}
+                                            text={endpoint.endpoint}
                                             maxLength={20}
                                             onShowTooltip={showTooltip}
                                             onHideTooltip={hideTooltip}
@@ -1128,27 +1112,34 @@ export default function ServiceExplorerPage() {
                                         >
                                           {endpoint.method}
                                         </span>
-                                        {isSoap && (
-                                          <button
-                                            style={styles.expandButton}
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              toggleEndpoint(endpoint.path)
-                                            }}
-                                          >
-                                            {isEndpointExpanded ? "▼" : "▶"}
-                                          </button>
+                                        {isSoap && endpoint.operations && (
+                                          <>
+                                            {isLoading ? (
+                                              <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                                            ) : (
+                                              <button
+                                                style={styles.expandButton}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  toggleEndpoint(endpoint.endpointId)
+                                                }}
+                                              >
+                                                {isEndpointExpanded ? "▼" : "▶"}
+                                              </button>
+                                            )}
+                                          </>
                                         )}
                                       </div>
 
                                       {/* SOAP Operations (nested under endpoint) */}
-                                      {isSoap && isEndpointExpanded && endpoint.operations && (
+                                      {isSoap && isEndpointExpanded && endpoint.operations && !isLoading && (
                                         <div>
                                           {endpoint.operations.map((operation) => {
-                                            const isOperationSelected = selectedSoapOperations.includes(operation)
+                                            const operationId = `${endpoint.endpointId}-${operation.operation}`
+                                            const isOperationSelected = selectedOperationIds.includes(operationId)
                                             return (
                                               <div
-                                                key={`${endpoint.path}-${operation}`}
+                                                key={operationId}
                                                 style={{
                                                   ...styles.operationItem,
                                                   backgroundColor: isOperationSelected
@@ -1168,13 +1159,38 @@ export default function ServiceExplorerPage() {
                                                   type="checkbox"
                                                   style={styles.checkbox}
                                                   checked={isOperationSelected}
-                                                  onChange={() => handleSoapOperationSelect(operation)}
+                                                  onChange={() =>
+                                                    handleOperationSelect(
+                                                      operation.operation,
+                                                      endpoint.endpointId,
+                                                      service.apiId,
+                                                      client.appId,
+                                                    )
+                                                  }
                                                   disabled={!isEndpointSelected}
                                                 />
-                                                <span style={styles.operationName}>{operation}</span>
+                                                <span style={styles.operationName}>{operation.operation}</span>
                                               </div>
                                             )
                                           })}
+                                        </div>
+                                      )}
+
+                                      {/* Loading state for SOAP operations */}
+                                      {isSoap && isEndpointExpanded && isLoading && (
+                                        <div style={{ ...styles.operationItem, justifyContent: "center" }}>
+                                          <span
+                                            style={{
+                                              color: "#6B7280",
+                                              fontSize: "14px",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: "8px",
+                                            }}
+                                          >
+                                            <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                                            Loading operations...
+                                          </span>
                                         </div>
                                       )}
                                     </div>
@@ -1190,131 +1206,187 @@ export default function ServiceExplorerPage() {
                 </div>
               ))}
 
-            {selectedRepositoryIds.length === 0 && (
+            {selectedClientIds.length === 0 && (
               <div style={{ padding: "16px", textAlign: "center", color: "#6B7280", fontSize: "14px" }}>
-                Select repositories to view their services
+                Select clients to view their services
               </div>
             )}
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Main Content - Now below the client section */}
         <div style={styles.mainContent}>
-          <div style={styles.contentHeader}>
-            <h2 style={styles.contentTitle}>Attributes</h2>
+          {/* Main Tabs */}
+          <div style={styles.mainTabs}>
+            <div
+              style={{
+                ...styles.mainTab,
+                ...(activeTab === "attributes" ? styles.activeMainTab : {}),
+              }}
+              onClick={() => setActiveTab("attributes")}
+            >
+              Attributes
+            </div>
+            <div
+              style={{
+                ...styles.mainTab,
+                ...(activeTab === "details" ? styles.activeMainTab : {}),
+              }}
+              onClick={() => setActiveTab("details")}
+            >
+              Additional Details
+            </div>
           </div>
 
-          {selectedServiceNames.length > 0 ? (
+          {/* Tab Content */}
+          {activeTab === "attributes" ? (
+            // Attributes Tab Content
             <>
-              {/* Service Tabs */}
-              <div style={styles.tabsContainer}>
-                {selectedServices.map((service) => (
-                  <button
-                    key={service.serviceName}
-                    style={{
-                      ...styles.tab,
-                      ...(service.serviceName === activeService?.serviceName ? styles.activeTab : {}),
-                    }}
-                    onClick={() => handleServiceTabChange(service.serviceName)}
-                  >
-                    <span style={styles.tabIcon}>🔗</span>
-                    <TruncatedText
-                      text={service.serviceName}
-                      maxLength={20}
-                      onShowTooltip={showTooltip}
-                      onHideTooltip={hideTooltip}
-                    />
-                  </button>
-                ))}
+              {/* Information Banner */}
+              <div style={styles.infoBanner}>
+                <div style={styles.infoBannerIcon}>
+                  <Info size={20} />
+                </div>
+                <div style={styles.infoBannerContent}>
+                  <div style={styles.infoBannerTitle}>Important Information</div>
+                  <div style={styles.infoBannerText}>
+                    Select services and endpoints to view their attributes. You can filter operations by using the
+                    search box above. For SOAP endpoints, you need to select specific operations after selecting the
+                    endpoint.
+                  </div>
+                </div>
               </div>
 
-              {/* Add Button */}
-              <button style={styles.addButton}>Add</button>
-
-              {/* Placeholder for the table component */}
-              {activeService && (selectedEndpointPaths.length > 0 || selectedSoapOperations.length > 0) ? (
-                <div style={styles.tableContainer}>
-                  {/* This is where you'll integrate your table component */}
-                  <div style={{ padding: "16px", borderBottom: "1px solid #E5E7EB" }}>
-                    <p style={{ fontSize: "14px", color: "#4B5563" }}>
-                      Operations table for {activeService.serviceName} - {selectedOperations.length} operations found
-                    </p>
-                    <p style={{ fontSize: "12px", color: "#9CA3AF", marginTop: "4px" }}>
-                      (Your table component will be integrated here)
-                    </p>
+              {selectedServiceIds.length > 0 ? (
+                <>
+                  {/* Service Tabs */}
+                  <div style={styles.tabsContainer}>
+                    {selectedServices.map(({ service }) => (
+                      <button
+                        key={service.apiId}
+                        style={{
+                          ...styles.tab,
+                          ...(service.apiId === activeService?.service.apiId ? styles.activeTab : {}),
+                        }}
+                        onClick={() => handleServiceTabChange(service.apiId)}
+                      >
+                        <span style={styles.tabIcon}>🔗</span>
+                        <TruncatedText
+                          text={`${service.apiName} v${service.version}`}
+                          maxLength={20}
+                          onShowTooltip={showTooltip}
+                          onHideTooltip={hideTooltip}
+                        />
+                      </button>
+                    ))}
                   </div>
 
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div style={styles.pagination}>
-                      <div style={styles.paginationInfo}>
-                        Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                        {Math.min(currentPage * itemsPerPage, selectedOperations.length)} of {selectedOperations.length}{" "}
-                        operations
+                  {/* Add Button */}
+                  <button style={styles.addButton}>Add</button>
+
+                  {/* Placeholder for the table component */}
+                  {activeService && (selectedEndpointIds.length > 0 || selectedOperationIds.length > 0) ? (
+                    <div style={styles.tableContainer}>
+                      {/* This is where you'll integrate your table component */}
+                      <div style={{ padding: "16px", borderBottom: "1px solid #E5E7EB" }}>
+                        <p style={{ fontSize: "14px", color: "#4B5563" }}>
+                          Operations table for {activeService.service.apiName} - {selectedOperations.length} operations
+                          found
+                        </p>
+                        <p style={{ fontSize: "12px", color: "#9CA3AF", marginTop: "4px" }}>
+                          (Your table component will be integrated here)
+                        </p>
                       </div>
-                      <div style={styles.paginationControls}>
-                        <button
-                          onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                          disabled={currentPage === 1}
-                          style={{
-                            ...styles.paginationButton,
-                            ...(currentPage === 1 ? styles.paginationButtonDisabled : {}),
-                          }}
-                        >
-                          ◀
-                        </button>
 
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageToShow
-                          if (totalPages <= 5) {
-                            pageToShow = i + 1
-                          } else if (currentPage <= 3) {
-                            pageToShow = i + 1
-                          } else if (currentPage >= totalPages - 2) {
-                            pageToShow = totalPages - 4 + i
-                          } else {
-                            pageToShow = currentPage - 2 + i
-                          }
-
-                          return (
+                      {/* Pagination */}
+                      {totalPages > 1 && (
+                        <div style={styles.pagination}>
+                          <div style={styles.paginationInfo}>
+                            Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                            {Math.min(currentPage * itemsPerPage, selectedOperations.length)} of{" "}
+                            {selectedOperations.length} operations
+                          </div>
+                          <div style={styles.paginationControls}>
                             <button
-                              key={pageToShow}
-                              onClick={() => handlePageChange(pageToShow)}
+                              onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                              disabled={currentPage === 1}
                               style={{
-                                ...styles.pageButton,
-                                ...(currentPage === pageToShow ? styles.activePageButton : {}),
+                                ...styles.paginationButton,
+                                ...(currentPage === 1 ? styles.paginationButtonDisabled : {}),
                               }}
                             >
-                              {pageToShow}
+                              ◀
                             </button>
-                          )
-                        })}
 
-                        <button
-                          onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                          disabled={currentPage === totalPages}
-                          style={{
-                            ...styles.paginationButton,
-                            ...(currentPage === totalPages ? styles.paginationButtonDisabled : {}),
-                          }}
-                        >
-                          ▶
-                        </button>
-                      </div>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageToShow
+                              if (totalPages <= 5) {
+                                pageToShow = i + 1
+                              } else if (currentPage <= 3) {
+                                pageToShow = i + 1
+                              } else if (currentPage >= totalPages - 2) {
+                                pageToShow = totalPages - 4 + i
+                              } else {
+                                pageToShow = currentPage - 2 + i
+                              }
+
+                              return (
+                                <button
+                                  key={pageToShow}
+                                  onClick={() => handlePageChange(pageToShow)}
+                                  style={{
+                                    ...styles.pageButton,
+                                    ...(currentPage === pageToShow ? styles.activePageButton : {}),
+                                  }}
+                                >
+                                  {pageToShow}
+                                </button>
+                              )
+                            })}
+
+                            <button
+                              onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                              disabled={currentPage === totalPages}
+                              style={{
+                                ...styles.paginationButton,
+                                ...(currentPage === totalPages ? styles.paginationButtonDisabled : {}),
+                              }}
+                            >
+                              ▶
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={styles.emptyState}>
+                      <p>Select endpoints to view their operations</p>
                     </div>
                   )}
-                </div>
+                </>
               ) : (
                 <div style={styles.emptyState}>
-                  <p>Select endpoints to view their operations</p>
+                  <p>{selectedClientIds.length > 0 ? "Select a service to continue" : "Select a client to begin"}</p>
                 </div>
               )}
             </>
           ) : (
-            <div style={styles.emptyState}>
-              <p>
-                {selectedRepositoryIds.length > 0 ? "Select a service to continue" : "Select a repository to begin"}
-              </p>
+            // Details Tab Content
+            <div>
+              <InlineEditableField
+                value={description}
+                onChange={setDescription}
+                placeholder="Enter a description for this service..."
+                label="Description"
+                icon={<Info size={18} color="#2563EB" />}
+              />
+              <InlineEditableField
+                value={comments}
+                onChange={setComments}
+                placeholder="Add your comments here..."
+                label="Comments"
+                icon={<MessageSquare size={18} color="#2563EB" />}
+              />
             </div>
           )}
         </div>
