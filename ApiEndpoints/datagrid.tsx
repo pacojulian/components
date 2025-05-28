@@ -1,19 +1,8 @@
 "use client"
 
 import React, { useState, useMemo, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-} from "@/components/ui/dropdown-menu"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { ChevronDown, Download, Filter, Eye, Search, X } from "lucide-react"
+import "./data-grid.css"
 
 // Types for the data grid
 export interface Column<T = any> {
@@ -95,6 +84,7 @@ export function DataGrid<T extends Record<string, any>>({
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(initialPageSize || 10)
+  const [openDropdowns, setOpenDropdowns] = useState<Set<string>>(new Set())
 
   // Get visible columns
   const displayColumns = useMemo(() => columns.filter((col) => visibleColumns[col.key]), [columns, visibleColumns])
@@ -219,6 +209,22 @@ export function DataGrid<T extends Record<string, any>>({
     }))
   }, [])
 
+  // Toggle dropdown
+  const toggleDropdown = useCallback((dropdownId: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    setOpenDropdowns((prev) => {
+      const newSet = new Set()
+      if (!prev.has(dropdownId)) {
+        newSet.add(dropdownId)
+      }
+      return newSet
+    })
+  }, [])
+
   // Export handler
   const handleExport = useCallback(() => {
     const selectedData =
@@ -236,330 +242,386 @@ export function DataGrid<T extends Record<string, any>>({
   const isIndeterminate =
     paginatedData.some((_, index) => selectedRows.has((currentPage - 1) * pageSize + index)) && !isAllSelected
 
+  // Close dropdowns when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      // Don't close if clicking on dropdown trigger or content
+      if (!target.closest(".data-grid__dropdown")) {
+        setOpenDropdowns(new Set())
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   return (
-    <Card className={`w-full ${className}`}>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <CardTitle className="text-2xl font-bold">{title}</CardTitle>
+    <div className={`data-grid ${className}`}>
+      <div className="data-grid__card">
+        <div className="data-grid__header">
+          <div className="data-grid__header-content">
+            <h2 className="data-grid__title">{title}</h2>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Search */}
-            {searchable && (
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-[200px]"
-                />
-              </div>
-            )}
+            <div className="data-grid__controls">
+              {/* Search */}
+              {searchable && (
+                <div className="data-grid__search">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="data-grid__search-input"
+                  />
+                  <Search className="data-grid__search-icon" size={16} />
+                </div>
+              )}
 
-            {/* Column Visibility */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4 mr-2" />
+              {/* Column Visibility */}
+              <div className="data-grid__dropdown">
+                <button
+                  className="data-grid__button data-grid__button--outline"
+                  onClick={(e) => toggleDropdown("columns", e)}
+                >
+                  <Eye size={16} />
                   Columns
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[200px]">
-                {columns.map((column) => (
-                  <DropdownMenuCheckboxItem
-                    key={column.key}
-                    checked={visibleColumns[column.key]}
-                    onCheckedChange={() => toggleColumnVisibility(column.key)}
-                  >
-                    {column.header}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Export */}
-            {exportable && (
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Active Filters */}
-        {Object.entries(columnFilters).length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <span className="text-sm text-muted-foreground">Active filters:</span>
-            {Object.entries(columnFilters).map(([columnKey, value]) => {
-              const column = columns.find((col) => col.key === columnKey)
-              return (
-                <Badge key={columnKey} variant="secondary" className="gap-1">
-                  {column?.header}: {value}
-                  <X className="h-3 w-3 cursor-pointer" onClick={() => clearColumnFilter(columnKey)} />
-                </Badge>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Selection Info */}
-        {selectable && selectedRows.size > 0 && (
-          <div className="text-sm text-muted-foreground">
-            {selectedRows.size} of {filteredData.length} rows selected
-          </div>
-        )}
-      </CardHeader>
-
-      <CardContent>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {selectable && (
-                  <TableHead className="w-[50px]">
-                    <Checkbox
-                      checked={isAllSelected}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all"
-                      className={isIndeterminate ? "data-[state=checked]:bg-primary" : ""}
-                    />
-                  </TableHead>
-                )}
-                {displayColumns.map((column) => (
-                  <TableHead key={column.key} style={{ width: column.width }} className="relative">
-                    <div className="flex items-center gap-2">
-                      <span>{column.header}</span>
-                      {column.filterable && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                              <Filter
-                                className={`h-3 w-3 ${columnFilters[column.key] !== undefined && columnFilters[column.key] !== null && columnFilters[column.key] !== "" ? "text-primary" : ""}`}
-                              />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-[200px]">
-                            <div className="p-2">
-                              {column.filterType === "boolean" ? (
-                                <div className="space-y-2">
-                                  <Button
-                                    variant={
-                                      columnFilters[column.key] === null || columnFilters[column.key] === undefined
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    size="sm"
-                                    className="w-full justify-start"
-                                    onClick={() => handleColumnFilter(column.key, null)}
-                                  >
-                                    All
-                                  </Button>
-                                  <Button
-                                    variant={columnFilters[column.key] === true ? "default" : "outline"}
-                                    size="sm"
-                                    className="w-full justify-start"
-                                    onClick={() => handleColumnFilter(column.key, true)}
-                                  >
-                                    True
-                                  </Button>
-                                  <Button
-                                    variant={columnFilters[column.key] === false ? "default" : "outline"}
-                                    size="sm"
-                                    className="w-full justify-start"
-                                    onClick={() => handleColumnFilter(column.key, false)}
-                                  >
-                                    False
-                                  </Button>
-                                </div>
-                              ) : column.filterType === "select" && column.filterOptions ? (
-                                <div className="space-y-2">
-                                  <Button
-                                    variant={
-                                      columnFilters[column.key] === null || columnFilters[column.key] === undefined
-                                        ? "default"
-                                        : "outline"
-                                    }
-                                    size="sm"
-                                    className="w-full justify-start"
-                                    onClick={() => handleColumnFilter(column.key, null)}
-                                  >
-                                    All
-                                  </Button>
-                                  {column.filterOptions.map((option) => (
-                                    <Button
-                                      key={option.value}
-                                      variant={columnFilters[column.key] === option.value ? "default" : "outline"}
-                                      size="sm"
-                                      className="w-full justify-start"
-                                      onClick={() => handleColumnFilter(column.key, option.value)}
-                                    >
-                                      {option.label}
-                                    </Button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <Input
-                                  placeholder={`Filter ${column.header}...`}
-                                  value={columnFilters[column.key] || ""}
-                                  onChange={(e) => handleColumnFilter(column.key, e.target.value)}
-                                />
-                              )}
-                            </div>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedData.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={displayColumns.length + (selectable ? 1 : 0)} className="h-24 text-center">
-                    No results found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedData.map((row, index) => {
-                  const actualIndex = (currentPage - 1) * pageSize + index
-                  const isSelected = selectedRows.has(actualIndex)
-
-                  return (
-                    <TableRow key={actualIndex} className={isSelected ? "bg-muted/50" : ""}>
-                      {selectable && (
-                        <TableCell>
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={(checked) => handleSelectRow(index, checked as boolean)}
-                            aria-label={`Select row ${index + 1}`}
-                          />
-                        </TableCell>
-                      )}
-                      {displayColumns.map((column) => {
-                        const value =
-                          typeof column.accessor === "function"
-                            ? column.accessor(row)
-                            : getNestedValue(row, column.accessor as string)
-
-                        return (
-                          <TableCell key={column.key}>
-                            {column.render ? column.render(value, row) : String(value || "")}
-                          </TableCell>
-                        )
-                      })}
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Enhanced Pagination */}
-        {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 py-4">
-            <div className="flex items-center space-x-2">
-              <div className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of{" "}
-                {filteredData.length} entries
-              </div>
-              {filteredData.length !== data.length && (
-                <div className="text-sm text-muted-foreground">(filtered from {data.length} total entries)</div>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              {/* Page size selector */}
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-muted-foreground">Rows per page:</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8">
-                      {pageSize}
-                      <ChevronDown className="h-4 w-4 ml-1" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {[5, 10, 20, 50, 100].map((size) => (
-                      <DropdownMenuCheckboxItem
-                        key={size}
-                        checked={pageSize === size}
-                        onCheckedChange={() => {
-                          setPageSize(size)
-                          setCurrentPage(1)
-                        }}
-                      >
-                        {size}
-                      </DropdownMenuCheckboxItem>
+                  <ChevronDown size={16} />
+                </button>
+                {openDropdowns.has("columns") && (
+                  <div className="data-grid__dropdown-content">
+                    {columns.map((column) => (
+                      <label key={column.key} className="data-grid__dropdown-item">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[column.key]}
+                          onChange={() => {
+                            toggleColumnVisibility(column.key)
+                            setOpenDropdowns(new Set())
+                          }}
+                        />
+                        {column.header}
+                      </label>
                     ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </div>
+                )}
               </div>
 
-              {/* Navigation buttons */}
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                First
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-
-              {/* Page numbers */}
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum
-                  if (totalPages <= 5) {
-                    pageNum = i + 1
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i
-                  } else {
-                    pageNum = currentPage - 2 + i
-                  }
-
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(pageNum)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {pageNum}
-                    </Button>
-                  )
-                })}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-              >
-                Last
-              </Button>
+              {/* Export */}
+              {exportable && (
+                <button className="data-grid__button data-grid__button--outline" onClick={handleExport}>
+                  <Download size={16} />
+                  Export
+                </button>
+              )}
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* Active Filters */}
+          {Object.entries(columnFilters).length > 0 && (
+            <div className="data-grid__filters">
+              <span className="data-grid__filters-label">Active filters:</span>
+              {Object.entries(columnFilters).map(([columnKey, value]) => {
+                const column = columns.find((col) => col.key === columnKey)
+                return (
+                  <span key={columnKey} className="data-grid__filter-badge">
+                    {column?.header}: {String(value)}
+                    <button className="data-grid__filter-remove" onClick={() => clearColumnFilter(columnKey)}>
+                      <X size={12} />
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Selection Info */}
+          {selectable && selectedRows.size > 0 && (
+            <div className="data-grid__selection-info">
+              {selectedRows.size} of {filteredData.length} rows selected
+            </div>
+          )}
+        </div>
+
+        <div className="data-grid__content">
+          <div className="data-grid__table-container">
+            <table className="data-grid__table">
+              <thead>
+                <tr>
+                  {selectable && (
+                    <th className="data-grid__th data-grid__th--checkbox">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        ref={(input) => {
+                          if (input) input.indeterminate = isIndeterminate
+                        }}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        aria-label="Select all"
+                      />
+                    </th>
+                  )}
+                  {displayColumns.map((column) => (
+                    <th key={column.key} className="data-grid__th" style={{ width: column.width }}>
+                      <div className="data-grid__th-content">
+                        <span>{column.header}</span>
+                        {column.filterable && (
+                          <div className="data-grid__dropdown">
+                            <button
+                              className={`data-grid__filter-button ${
+                                columnFilters[column.key] !== undefined &&
+                                columnFilters[column.key] !== null &&
+                                columnFilters[column.key] !== ""
+                                  ? "data-grid__filter-button--active"
+                                  : ""
+                              }`}
+                              onClick={(e) => toggleDropdown(`filter-${column.key}`, e)}
+                            >
+                              <Filter size={12} />
+                            </button>
+                            {openDropdowns.has(`filter-${column.key}`) && (
+                              <div className="data-grid__dropdown-content data-grid__filter-dropdown">
+                                {column.filterType === "boolean" ? (
+                                  <div className="data-grid__filter-options">
+                                    <button
+                                      className={`data-grid__filter-option ${
+                                        columnFilters[column.key] === null || columnFilters[column.key] === undefined
+                                          ? "data-grid__filter-option--active"
+                                          : ""
+                                      }`}
+                                      onClick={() => handleColumnFilter(column.key, null)}
+                                    >
+                                      All
+                                    </button>
+                                    <button
+                                      className={`data-grid__filter-option ${
+                                        columnFilters[column.key] === true ? "data-grid__filter-option--active" : ""
+                                      }`}
+                                      onClick={() => {
+                                        handleColumnFilter(column.key, true)
+                                        setOpenDropdowns(new Set())
+                                      }}
+                                    >
+                                      True
+                                    </button>
+                                    <button
+                                      className={`data-grid__filter-option ${
+                                        columnFilters[column.key] === false ? "data-grid__filter-option--active" : ""
+                                      }`}
+                                      onClick={() => {
+                                        handleColumnFilter(column.key, false)
+                                        setOpenDropdowns(new Set())
+                                      }}
+                                    >
+                                      False
+                                    </button>
+                                  </div>
+                                ) : column.filterType === "select" && column.filterOptions ? (
+                                  <div className="data-grid__filter-options">
+                                    <button
+                                      className={`data-grid__filter-option ${
+                                        columnFilters[column.key] === null || columnFilters[column.key] === undefined
+                                          ? "data-grid__filter-option--active"
+                                          : ""
+                                      }`}
+                                      onClick={() => handleColumnFilter(column.key, null)}
+                                    >
+                                      All
+                                    </button>
+                                    {column.filterOptions.map((option) => (
+                                      <button
+                                        key={option.value}
+                                        className={`data-grid__filter-option ${
+                                          columnFilters[column.key] === option.value
+                                            ? "data-grid__filter-option--active"
+                                            : ""
+                                        }`}
+                                        onClick={() => {
+                                          handleColumnFilter(column.key, option.value)
+                                          setOpenDropdowns(new Set())
+                                        }}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    placeholder={`Filter ${column.header}...`}
+                                    value={columnFilters[column.key] || ""}
+                                    onChange={(e) => handleColumnFilter(column.key, e.target.value)}
+                                    className="data-grid__filter-input"
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedData.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={displayColumns.length + (selectable ? 1 : 0)}
+                      className="data-grid__td data-grid__no-results"
+                    >
+                      No results found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedData.map((row, index) => {
+                    const actualIndex = (currentPage - 1) * pageSize + index
+                    const isSelected = selectedRows.has(actualIndex)
+
+                    return (
+                      <tr key={actualIndex} className={`data-grid__tr ${isSelected ? "data-grid__tr--selected" : ""}`}>
+                        {selectable && (
+                          <td className="data-grid__td">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => handleSelectRow(index, e.target.checked)}
+                              aria-label={`Select row ${index + 1}`}
+                            />
+                          </td>
+                        )}
+                        {displayColumns.map((column) => {
+                          const value =
+                            typeof column.accessor === "function"
+                              ? column.accessor(row)
+                              : getNestedValue(row, column.accessor as string)
+
+                          return (
+                            <td key={column.key} className="data-grid__td">
+                              {column.render ? column.render(value, row) : String(value || "")}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Enhanced Pagination */}
+          {totalPages > 1 && (
+            <div className="data-grid__pagination">
+              <div className="data-grid__pagination-info">
+                <div className="data-grid__pagination-text">
+                  Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filteredData.length)}{" "}
+                  of {filteredData.length} entries
+                </div>
+                {filteredData.length !== data.length && (
+                  <div className="data-grid__pagination-text data-grid__pagination-text--muted">
+                    (filtered from {data.length} total entries)
+                  </div>
+                )}
+              </div>
+
+              <div className="data-grid__pagination-controls">
+                {/* Page size selector */}
+                <div className="data-grid__page-size">
+                  <span className="data-grid__page-size-label">Rows per page:</span>
+                  <div className="data-grid__dropdown">
+                    <button
+                      className="data-grid__button data-grid__button--outline data-grid__button--small"
+                      onClick={(e) => toggleDropdown("pageSize", e)}
+                    >
+                      {pageSize}
+                      <ChevronDown size={16} />
+                    </button>
+                    {openDropdowns.has("pageSize") && (
+                      <div className="data-grid__dropdown-content">
+                        {[5, 10, 20, 50, 100].map((size) => (
+                          <button
+                            key={size}
+                            className={`data-grid__dropdown-item ${
+                              pageSize === size ? "data-grid__dropdown-item--active" : ""
+                            }`}
+                            onClick={() => {
+                              setPageSize(size)
+                              setCurrentPage(1)
+                              setOpenDropdowns(new Set())
+                            }}
+                          >
+                            {size}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Navigation buttons */}
+                <button
+                  className="data-grid__button data-grid__button--outline data-grid__button--small"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                >
+                  First
+                </button>
+                <button
+                  className="data-grid__button data-grid__button--outline data-grid__button--small"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+
+                {/* Page numbers */}
+                <div className="data-grid__page-numbers">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        className={`data-grid__button data-grid__button--small ${
+                          currentPage === pageNum ? "data-grid__button--primary" : "data-grid__button--outline"
+                        }`}
+                        onClick={() => setCurrentPage(pageNum)}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <button
+                  className="data-grid__button data-grid__button--outline data-grid__button--small"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+                <button
+                  className="data-grid__button data-grid__button--outline data-grid__button--small"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
